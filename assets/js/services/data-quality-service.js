@@ -1,7 +1,8 @@
 import { REQUIRED_FIELDS } from "../utils/constants.js";
 import { buildBlockedTimeWarnings } from "./reconciliation-service.js";
+import { buildManagementWorkLogBreakdown, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
 
-export function buildQualityReport({ jira, fieldMap, capacity, issues }) {
+export function buildQualityReport({ jira, fieldMap, capacity, issues, personMappings = [], workCategoryMapping }) {
   const items = [];
   if (!jira?.suggestedMainSheet) items.push(issue("error", "Missing main Jira sheet", "شیت اصلی Jira پیدا نشد."));
   if (!jira?.suggestedQaSheet) items.push(issue("warning", "Missing QA Return sheet", "شیت QA Return پیدا نشد."));
@@ -25,6 +26,8 @@ export function buildQualityReport({ jira, fieldMap, capacity, issues }) {
     if (person.availableCapacity === null) items.push(issue("warning", "Missing capacity", `${person.capacityName}: ظرفیت آماده پیدا نشد.`));
   });
   items.push(...buildBlockedTimeWarnings(issues || []));
+  const workLogBreakdown = buildManagementWorkLogBreakdown(issues || [], personMappings, fieldMap, workCategoryMapping);
+  items.push(...buildWorkLogQualityWarnings(workLogBreakdown));
   return items;
 }
 

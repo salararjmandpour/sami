@@ -1,4 +1,5 @@
 import { KPI_CARD_ORDER, KPI_LABELS } from "../utils/constants.js";
+import { CALCULATION_VERSION } from "../utils/constants.js";
 import { escapeHtml } from "../utils/helpers.js";
 import { formatNumber } from "../utils/formatters.js";
 
@@ -33,6 +34,8 @@ export function renderQualitySummary(report) {
       <span><b>${counts.warning}</b> Warnings</span>
       <span><b>${counts.info}</b> Information</span>
     </div>
+    <p class="status-note">نسخه محاسبات گزارش: ${escapeHtml(report?.calculationVersion || "نامشخص")}</p>
+    ${(report?.calculationVersion && report.calculationVersion !== CALCULATION_VERSION) ? `<button id="recalculateReportBtn" class="button button-secondary" type="button">محاسبه دوباره با نسخه ${escapeHtml(CALCULATION_VERSION)}</button>` : ""}
     ${counts.error === 0 && counts.warning > 0 ? `<p class="warning-message">گزارش محاسبه شده است، اما برخی داده‌های منبع نیاز به بررسی دارند.</p>` : ""}
     <div class="warning-links">${warnings.map((item) => `<a href="#${escapeHtml(item.target)}" data-nav-target="${escapeHtml(item.section)}">${escapeHtml(item.label)}</a>`).join("")}</div>
     <p class="status-note">وضعیت ممیزی: ${escapeHtml(reconciliation?.reconciliationStatus || "نامشخص")}</p>

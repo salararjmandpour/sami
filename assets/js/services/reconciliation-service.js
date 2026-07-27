@@ -3,6 +3,7 @@ import { CALCULATION_VERSION } from "../utils/constants.js";
 import { comparable, normalizeString } from "./normalization/string-normalizer.js";
 import { normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
 import { sum, average } from "./calculations/time-calculator.js";
+import { buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
 
 const TOLERANCE = 0.01;
 const PLAN_TYPES = ["planned", "unplanned", "carry_over", "unknown"];
@@ -23,12 +24,14 @@ export function buildReconciliation({ report, issues, capacityPeople = [], perso
   const personReconciliation = buildPersonReconciliation(context);
   const qaReconciliation = buildQaReconciliation(context);
   const workLogReconciliation = buildWorkLogReconciliation(context);
+  const workLogCategoryReconciliation = buildWorkLogCategoryReconciliation(context);
   const blockedTimeDistribution = buildBlockedTimeDistribution(context);
   const timeReconciliation = buildTimeReconciliation(context);
   const unallocatedBuckets = buildUnallocatedBuckets(estimateReconciliation, workLogReconciliation, planTypeReconciliation);
   const drillDown = buildDrillDown(context, estimateReconciliation, workLogReconciliation, blockedTimeDistribution);
   const reconciliationIssues = [
     ...estimateReconciliation.errors,
+    ...workLogCategoryReconciliation.errors,
     ...blockedTimeDistribution.warnings,
     ...timeReconciliation.warnings
   ];
@@ -47,6 +50,9 @@ export function buildReconciliation({ report, issues, capacityPeople = [], perso
     personReconciliation,
     qaReconciliation,
     workLogReconciliation,
+    workLogCategoryReconciliation,
+    workLogBreakdown: workLogCategoryReconciliation.managementBreakdown,
+    personWorkLogBreakdowns: workLogCategoryReconciliation.personBreakdowns,
     blockedTimeDistribution,
     leadTimeDistribution: timeReconciliation.leadTimeDistribution,
     cycleTimeDistribution: timeReconciliation.cycleTimeDistribution,
@@ -297,13 +303,48 @@ function buildUnallocatedBuckets(estimate, workLog, planType) {
   };
 }
 
+function buildWorkLogCategoryReconciliation(context) {
+  const managementBreakdown = buildManagementWorkLogBreakdown(context.issues, context.personMappings, context.fieldMappings, context.report?.workCategoryMapping);
+  const personBreakdowns = context.personMappings.filter((mapping) => mapping.jiraName).map((mapping) => ({
+    person: mapping.jiraName,
+    role: mapping.role,
+    ...buildPersonWorkLogBreakdown(context.issues, mapping, context.report?.workCategoryMapping)
+  }));
+  const totals = managementBreakdown.totals;
+  const rows = [
+    { field: "Raw Work Logged", hours: totals.rawWorkLoggedHours },
+    { field: "Productive Work Logged", hours: totals.productiveWorkLoggedHours },
+    { field: "Block Work Logged", hours: totals.blockWorkLoggedHours },
+    { field: "Meeting Work Logged", hours: totals.meetingWorkLoggedHours },
+    { field: "Technical Work Logged", hours: totals.technicalWorkLoggedHours },
+    { field: "Version Work Logged", hours: totals.versionWorkLoggedHours },
+    { field: "Technical + Version Work Logged", hours: totals.technicalVersionWorkLoggedHours },
+    { field: "Non-Productive Work Logged", hours: totals.nonProductiveWorkLoggedHours },
+    { field: "Reconciliation Difference", hours: totals.reconciliationDifference }
+  ];
+  const errors = Math.abs(totals.reconciliationDifference) > TOLERANCE ? [{ code: "WORK_LOG_CATEGORY_RECONCILIATION_DIFF", difference: totals.reconciliationDifference, tolerance: TOLERANCE }] : [];
+  return {
+    rows,
+    totals,
+    formula: "Raw - (Productive + Block + Meeting + Technical + Version)",
+    tolerance: TOLERANCE,
+    errors,
+    warnings: buildWorkLogQualityWarnings(managementBreakdown),
+    managementBreakdown,
+    personBreakdowns
+  };
+}
+
 function buildDrillDown(context, estimate, workLog, blocked) {
   const now = new Date().toISOString();
   const byPlan = estimate.management.byPlan;
+  const breakdown = context.report?.calculatedMetrics?.management?.workLogBreakdown || buildManagementWorkLogBreakdown(context.issues, context.personMappings, context.fieldMappings, context.report?.workCategoryMapping);
+  const rawAccuracy = estimate.management.totalEstimate && workLog.totals.managementWorkLogged ? estimate.management.totalEstimate / workLog.totals.managementWorkLogged * 100 : null;
+  const productiveEstimated = context.report?.calculatedMetrics?.management?.productiveEstimatedHours ?? sum(context.issues.filter((issue) => breakdown.rows.find((row) => row.issueKey === issue.issueKey)?.workCategory === "productive").map((issue) => (issue.devEstimate || 0) + (issue.testEstimate || 0)));
   return {
     capacityUtilization: drill("Capacity Utilization", "(Planned Dev + Unplanned Dev + Planned Test + Unplanned Test) / Total Available Capacity * 100", byPlan.planned.totalEstimate + byPlan.unplanned.totalEstimate, context.report?.calculatedMetrics?.management?.totalCapacity || null, [...byPlan.planned.issueKeys, ...byPlan.unplanned.issueKeys], ["Carry Over excluded from Capacity Utilization"], now),
     deliveryRate: drill("Delivery Rate", "Done planned/unplanned issues / planned/unplanned issues * 100", context.issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType) && issue.statusCanonical === "done").length, context.issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType)).length, context.issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType)).map((issue) => issue.issueKey), ["Carry Over excluded from Delivery Rate"], now),
-    estimationAccuracy: drill("Estimation Accuracy", "Estimated Hours / Work Logged Hours * 100", estimate.management.totalEstimate, workLog.totals.managementWorkLogged, context.issues.map((issue) => issue.issueKey), ["Missing Work Log"], now, { interpretation: "Below 100% means logged time is greater than estimated time. Above 100% means estimated time is greater than logged time." }),
+    estimationAccuracy: drill("Productive Estimation Accuracy", "Productive Estimated Hours / Productive Work Logged Hours * 100", productiveEstimated, breakdown.totals.productiveWorkLoggedHours, context.issues.map((issue) => issue.issueKey), ["Non-productive work logs excluded from the displayed accuracy denominator and non-productive estimates excluded from numerator"], now, { rawEstimationAccuracy: rawAccuracy, rawFormula: "Raw Estimated Hours / Raw Work Logged Hours * 100", rawEstimatedHours: estimate.management.totalEstimate, rawWorkLoggedHours: workLog.totals.managementWorkLogged, productiveEstimatedHours: productiveEstimated, productiveWorkLoggedHours: breakdown.totals.productiveWorkLoggedHours, workLogBreakdown: breakdown.totals, interpretation: "Displayed accuracy uses productive issue estimate and productive work logged. Raw accuracy remains available here for audit." }),
     blockedTime: drill("Blocked Time", "Sum of Time in block converted from Excel duration to hours", blocked.distribution.total, null, blocked.rows.map((row) => row.issueKey), [], now)
   };
 }

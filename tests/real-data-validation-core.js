@@ -7,6 +7,7 @@ import { normalizeKpiConfig } from "../assets/js/models/kpi-model.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
 import { buildQualityReport, issue as qualityIssue } from "../assets/js/services/data-quality-service.js";
 import { buildReconciliation } from "../assets/js/services/reconciliation-service.js";
+import { defaultWorkCategoryMapping } from "../assets/js/services/work-log-category-service.js";
 import { workingHoursBetween } from "../assets/js/services/holiday-service.js";
 import { DEFAULT_HOLIDAYS } from "../assets/js/config/iran-holidays.js";
 import { comparable, normalizeString } from "../assets/js/services/normalization/string-normalizer.js";
@@ -32,16 +33,18 @@ export async function runRealDataValidation(customLoader) {
   const qaAnalysis = analyzeQa(jira);
   const issues = normalizeJiraRows(jira.main.rows, jira.fieldMap, qaAnalysis.uniqueKeys, DEFAULT_HOLIDAYS, workingHoursBetween);
   const mappings = buildInitialPersonMappings(capacity.people, issues, []);
-  const quality = buildQualityReport({ jira, fieldMap: jira.fieldMap, capacity, issues });
+  const workCategoryMapping = defaultWorkCategoryMapping();
+  const quality = buildQualityReport({ jira, fieldMap: jira.fieldMap, capacity, issues, personMappings: mappings, workCategoryMapping });
   qaAnalysis.unmatchedKeys.forEach((key) => quality.push(qualityIssue("warning", "Unmatched QA Return Key", `QA Return key not found in main Jira dataset: ${key}`)));
-  const management = calculateManagementMetrics(issues, capacity.people, mappings);
-  const people = calculatePersonDashboards(issues, capacity.people, mappings);
+  const management = calculateManagementMetrics(issues, capacity.people, mappings, workCategoryMapping);
+  const people = calculatePersonDashboards(issues, capacity.people, mappings, workCategoryMapping);
   const report = {
     id: "real-data-validation",
     teamName: "Real Data",
     sprintName: jira.suggestedMainSheet,
     createdAt: new Date().toISOString(),
-    calculatedMetrics: { management, people }
+    calculatedMetrics: { management, people },
+    workCategoryMapping
   };
   const reconciliation = buildReconciliation({
     report,
@@ -70,6 +73,8 @@ export async function runRealDataValidation(customLoader) {
     people,
     metricDetails: details,
     reconciliation,
+    workLogBreakdown: management.workLogBreakdown,
+    personWorkLogBreakdowns: people.map((person) => ({ person: person.name, role: person.role, ...person.workLogBreakdown })),
     dataQuality: { counts: countBy(quality, "severity"), issues: quality },
     checks
   };

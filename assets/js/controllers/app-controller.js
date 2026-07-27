@@ -8,17 +8,18 @@ import { createReport } from "../models/report-model.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../services/calculations/report-calculator.js";
 import { buildQualityReport } from "../services/data-quality-service.js";
 import { buildReconciliation } from "../services/reconciliation-service.js";
-import { dbClearAll, dbGetAll, dbPut, STORES } from "../services/indexeddb-service.js";
+import { dbClearAll, dbGet, dbGetAll, dbPut, STORES } from "../services/indexeddb-service.js";
 import { exportJson } from "../services/export-service.js";
+import { defaultWorkCategoryMapping, mergeWorkCategoryMapping } from "../services/work-log-category-service.js";
 import { getHolidays, saveHoliday } from "../services/holiday-service.js";
 import { workingHoursBetween } from "../services/holiday-service.js";
-import { renderHolidays, readHolidayRows } from "../views/settings-view.js";
+import { renderHolidays, readHolidayRows, renderWorkCategoryMappings, readWorkCategoryMappings } from "../views/settings-view.js";
 import { notify } from "../views/notification-view.js";
 import { evaluateGenerateReadiness, renderGenerateState, renderPreview, setFileStatus } from "../views/upload-view.js";
 
 export class AppController {
   constructor() {
-    this.state = { reports: [], activeReport: null, holidays: [] };
+    this.state = { reports: [], activeReport: null, holidays: [], workCategoryMapping: defaultWorkCategoryMapping() };
   }
 
   async init() {
@@ -29,8 +30,12 @@ export class AppController {
     this.wireBackup();
     await this.refreshReports();
     this.state.holidays = await getHolidays();
+    const savedCategoryMapping = await dbGet("settings", "workCategoryMapping");
+    this.state.workCategoryMapping = mergeWorkCategoryMapping(savedCategoryMapping?.value || {});
     renderHolidays(this.state.holidays);
+    renderWorkCategoryMappings(this.state.workCategoryMapping);
     this.wireHolidays();
+    this.wireWorkCategoryMappings();
     renderPreview(this.state);
     renderGenerateState(evaluateGenerateReadiness(this.state));
   }
@@ -101,16 +106,17 @@ export class AppController {
     }));
     const qaKeys = extractQaKeys(this.state.jira.qa.rows);
     const issues = normalizeJiraRows(this.state.jira.main.rows, this.state.fieldMap, qaKeys, this.state.holidays, workingHoursBetween);
-    const quality = buildQualityReport({ jira: this.state.jira, fieldMap: this.state.fieldMap, capacity: this.state.capacity, issues });
+    const quality = buildQualityReport({ jira: this.state.jira, fieldMap: this.state.fieldMap, capacity: this.state.capacity, issues, personMappings: this.state.personMappings, workCategoryMapping: this.state.workCategoryMapping });
     if (quality.some((item) => item.severity === "error")) {
       const { renderQuality } = await import("../views/quality-view.js");
       renderQuality(quality);
       throw new Error("خطای بحرانی در کیفیت داده وجود دارد. بخش کیفیت داده را بررسی کنید.");
     }
-    const management = calculateManagementMetrics(issues, this.state.capacity.people, this.state.personMappings);
-    const people = calculatePersonDashboards(issues, this.state.capacity.people, this.state.personMappings);
+    const management = calculateManagementMetrics(issues, this.state.capacity.people, this.state.personMappings, this.state.workCategoryMapping);
+    const people = calculatePersonDashboards(issues, this.state.capacity.people, this.state.personMappings, this.state.workCategoryMapping);
+    attachIssueWorkLogBreakdown(issues, management.workLogBreakdown);
     const reconciliation = buildReconciliation({
-      report: { teamName: document.getElementById("teamName").value, sprintName: document.getElementById("sprintName").value, calculatedMetrics: { management, people } },
+      report: { teamName: document.getElementById("teamName").value, sprintName: document.getElementById("sprintName").value, calculatedMetrics: { management, people }, workCategoryMapping: this.state.workCategoryMapping },
       issues,
       capacityPeople: this.state.capacity.people,
       personMappings: this.state.personMappings,
@@ -129,12 +135,13 @@ export class AppController {
       normalizedData: { issues, capacityPeople: this.state.capacity.people },
       calculatedMetrics: { management, people },
       mappingSnapshot: { fieldMappings: this.state.fieldMap, personMappings: this.state.personMappings },
+      workCategoryMapping: this.state.workCategoryMapping,
       dataQuality: quality,
       reconciliation,
       kpiConfig: normalizeKpiConfig(this.state.kpi.kpis)
     });
     await dbPut("reports", report);
-    await dbPut("metricResults", { id: report.id, calculatedMetrics: report.calculatedMetrics });
+    await dbPut("metricResults", { id: report.id, calculatedMetrics: report.calculatedMetrics, calculationVersion: report.calculationVersion });
     await dbPut("kpiConfigurations", { id: report.id, kpiConfig: report.kpiConfig });
     await dbPut("dataQualityIssues", { id: report.id, items: quality });
     this.openReport(report);
@@ -211,8 +218,56 @@ export class AppController {
       }
     });
   }
+
+  wireWorkCategoryMappings() {
+    document.getElementById("addWorkCategoryAliasBtn")?.addEventListener("click", async () => {
+      const category = document.getElementById("workCategorySelect").value;
+      const source = document.getElementById("workCategorySourceSelect").value;
+      const value = document.getElementById("workCategoryAliasInput").value.trim();
+      if (!value) return;
+      this.state.workCategoryMapping[category][source].push(value);
+      this.state.workCategoryMapping = mergeWorkCategoryMapping(this.state.workCategoryMapping);
+      await this.saveWorkCategoryMapping(this.state.workCategoryMapping);
+    });
+    document.getElementById("workCategoryMappingPanel")?.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-remove-work-alias]");
+      if (!button) return;
+      const { category, source, value } = button.dataset;
+      this.state.workCategoryMapping[category][source] = this.state.workCategoryMapping[category][source].filter((alias) => alias !== value);
+      await this.saveWorkCategoryMapping(this.state.workCategoryMapping);
+    });
+    document.getElementById("resetWorkCategoryMappingBtn")?.addEventListener("click", async () => {
+      this.state.workCategoryMapping = defaultWorkCategoryMapping();
+      await this.saveWorkCategoryMapping(this.state.workCategoryMapping);
+    });
+    document.getElementById("exportWorkCategoryMappingBtn")?.addEventListener("click", () => exportJson("work-category-mapping.json", this.state.workCategoryMapping));
+    document.getElementById("importWorkCategoryMappingInput")?.addEventListener("change", async (event) => {
+      try {
+        const file = event.target.files[0];
+        if (!file) return;
+        this.state.workCategoryMapping = mergeWorkCategoryMapping(JSON.parse(await file.text()));
+        await this.saveWorkCategoryMapping(this.state.workCategoryMapping);
+        notify("نگاشت دسته‌بندی Work Log وارد شد.");
+      } catch {
+        notify("فایل نگاشت دسته‌بندی معتبر نیست.", "error");
+      }
+    });
+  }
+
+  async saveWorkCategoryMapping(nextMapping = null) {
+    this.state.workCategoryMapping = mergeWorkCategoryMapping(nextMapping || readWorkCategoryMappings() || this.state.workCategoryMapping);
+    await dbPut("settings", { id: "workCategoryMapping", value: this.state.workCategoryMapping });
+    renderWorkCategoryMappings(this.state.workCategoryMapping);
+  }
 }
 
 function userSafeError(error, fallback) {
   return error?.message && !String(error.message).includes("\n") ? error.message : fallback;
+}
+
+function attachIssueWorkLogBreakdown(issues, breakdown) {
+  const rows = new Map((breakdown?.rows || []).map((row) => [row.issueKey, row]));
+  issues.forEach((issue) => {
+    issue.workLogCategoryBreakdown = rows.get(issue.issueKey) || null;
+  });
 }

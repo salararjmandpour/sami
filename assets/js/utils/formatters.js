@@ -14,13 +14,14 @@ export function formatDate(value) {
   return date.toLocaleDateString("fa-IR");
 }
 
-export function metric(value, suffix = "", reason = "") {
+export function metric(value, suffix = "", reason = "", extra = {}) {
   const unavailable = value === null || value === undefined || Number.isNaN(value);
   return {
     value: unavailable ? null : value,
     displayValue: unavailable ? "N/A" : formatNumber(value, suffix),
     status: unavailable ? "unavailable" : "ok",
-    reason: unavailable ? (reason || "Required data is missing.") : ""
+    reason: unavailable ? (reason || "Required data is missing.") : "",
+    unit: suffix,
+    ...extra
   };
 }
-

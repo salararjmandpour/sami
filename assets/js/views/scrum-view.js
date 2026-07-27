@@ -1,7 +1,7 @@
 import { escapeHtml } from "../utils/helpers.js";
 import { KPI_LABELS } from "../utils/constants.js";
 
-const PERSON_KEYS = ["availableCapacity", "plannedWork", "unplannedWork", "carryOver", "capacityUtilization", "deliveryRateDevelop", "deliveryRate", "submittedToQa", "qaReturnCount", "qaReturnRate", "firstPassRate", "workLogged", "estimationAccuracy", "leadTime", "cycleTime", "blockedTime", "hotfixCount", "bugfixCount"];
+const PERSON_KEYS = ["availableCapacity", "plannedWork", "unplannedWork", "carryOver", "capacityUtilization", "deliveryRateDevelop", "deliveryRate", "submittedToQa", "qaReturnCount", "qaReturnRate", "firstPassRate", "rawWorkLogged", "productiveWorkLogged", "blockWorkLogged", "meetingWorkLogged", "technicalVersionWorkLogged", "nonProductiveWorkLogged", "estimationAccuracy", "leadTime", "cycleTime", "blockedTime", "hotfixCount", "bugfixCount"];
 
 export function renderScrumDashboards(people) {
   const target = document.getElementById("scrumDashboards");
@@ -14,4 +14,3 @@ export function renderScrumDashboards(people) {
     <div class="kpi-grid">${PERSON_KEYS.map((key) => `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(person.metrics[key]?.displayValue || "N/A")}</div></article>`).join("")}</div>
   </section>`).join("");
 }
-

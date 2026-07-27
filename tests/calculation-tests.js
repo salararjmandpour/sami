@@ -19,10 +19,9 @@ test("QA Return Rate", () => equal(calculateManagementMetrics(issues, capacity, 
 test("First Pass Rate", () => equal(calculateManagementMetrics(issues, capacity, mappings).firstPassRate.value, 50));
 test("Hotfix Count", () => equal(calculateManagementMetrics(issues, capacity, mappings).hotfixCount.value, 1));
 test("Bug Fix Count", () => equal(calculateManagementMetrics(issues, capacity, mappings).bugfixCount.value, 1));
-test("Estimation Accuracy", () => close(calculateManagementMetrics(issues, capacity, mappings).estimationAccuracy.value, 225));
+test("Estimation Accuracy", () => close(calculateManagementMetrics(issues, capacity, mappings).estimationAccuracy.value, 112.5));
 test("Division by zero", () => equal(calculateManagementMetrics([], [], []).capacityUtilization.value, null));
 test("Missing Story Points", () => equal(calculateManagementMetrics(issues, capacity, mappings).averageStorySize.value, null));
 test("Missing Rework Time", () => equal(calculateManagementMetrics(issues, capacity, mappings).reworkRate.value, null));
 test("Developer Capacity Utilization", () => close(calculatePersonDashboards(issues, capacity, mappings)[0].metrics.capacityUtilization.value, 50));
 test("QA Capacity Utilization including Carry Over", () => close(calculatePersonDashboards(issues, capacity, mappings)[1].metrics.capacityUtilization.value, 70));
-

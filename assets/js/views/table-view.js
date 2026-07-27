@@ -5,7 +5,9 @@ let tableState = { page: 1, pageSize: 50, sortKey: "issueKey", direction: "asc",
 
 const COLUMNS = [
   ["issueKey", "Issue Key"], ["summary", "Summary"], ["status", "Status"], ["assignee", "Assignee"], ["qaOwner", "QA Owner"],
-  ["planType", "Plan Type"], ["devEstimate", "Dev Estimate"], ["testEstimate", "Test Estimate"], ["workLogged", "Work Logged"],
+  ["planType", "Plan Type"], ["workCategory", "Work Category"], ["devEstimate", "Dev Estimate"], ["testEstimate", "Test Estimate"], ["workLogged", "Work Logged"],
+  ["rawWorkLoggedHours", "Raw Work Logged"], ["productiveWorkLoggedHours", "Productive Work Logged"], ["blockWorkLoggedHours", "Block Work Logged"],
+  ["meetingWorkLoggedHours", "Meeting Work Logged"], ["technicalWorkLoggedHours", "Technical Work Logged"], ["versionWorkLoggedHours", "Version Work Logged"], ["technicalVersionWorkLoggedHours", "Technical + Version Work Logged"],
   ["created", "Created"], ["firstInProgress", "First In Progress"], ["firstAutomationTest", "First Automation Test"], ["doneDate", "Done Date"],
   ["leadTimeHours", "Lead Time"], ["cycleTimeHours", "Cycle Time"], ["blockedHours", "Blocked Hours"], ["labels", "Labels"], ["qaReturned", "QA Returned"]
 ];
@@ -38,6 +40,9 @@ export function renderIssueTable(issues) {
 
 function display(issue, key) {
   if (["created", "firstInProgress", "firstAutomationTest", "doneDate"].includes(key)) return formatDate(issue[key]);
+  const breakdown = issue.workLogCategoryBreakdown || {};
+  if (key in breakdown) return formatNumber(breakdown[key]);
+  if (key === "workCategory") return breakdown.workCategory || "productive";
   if (["devEstimate", "testEstimate", "workLogged", "leadTimeHours", "cycleTimeHours", "blockedHours"].includes(key)) return formatNumber(issue[key]);
   if (key === "labels") return issue.labels.join("، ") || "N/A";
   if (key === "qaReturned") return issue.qaReturned ? "بله" : "خیر";
@@ -47,4 +52,3 @@ function display(issue, key) {
 export function getIssueCsvRows(issues) {
   return [COLUMNS.map(([, title]) => title), ...issues.map((issue) => COLUMNS.map(([key]) => display(issue, key)))];
 }
-
