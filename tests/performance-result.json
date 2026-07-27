@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-07-27T11:31:44.034Z",
+  "results": [
+    {
+      "browser": "Node.js service pipeline; browser render not tested",
+      "datasetSize": 130,
+      "parseDurationMs": 201.16,
+      "normalizeDurationMs": 21.33,
+      "calculateDurationMs": 58.74,
+      "renderDurationMs": "not tested",
+      "filterDurationMs": "not tested",
+      "memoryNotes": "heapUsedMB=26.05",
+      "result": "passed"
+    },
+    {
+      "browser": "Node.js service pipeline; browser render not tested",
+      "datasetSize": 5000,
+      "parseDurationMs": 86.72,
+      "normalizeDurationMs": 614.6,
+      "calculateDurationMs": 776.08,
+      "renderDurationMs": "not tested",
+      "filterDurationMs": "not tested",
+      "memoryNotes": "heapUsedMB=43.71",
+      "result": "passed"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+.table-wrap { overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: right; vertical-align: top; white-space: nowrap; }
+th { background: #eef1f1; color: #263230; position: sticky; top: 0; z-index: 1; }
+tr:hover td { background: #fbfdfd; }
+.table-toolbar, .pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.pagination button[disabled] { opacity: .45; cursor: not-allowed; }
+.mapping-input { min-width: 150px; }

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>اعتبارسنجی داده واقعی</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/variables.css">
+    <link rel="stylesheet" href="../assets/css/components.css">
+    <link rel="stylesheet" href="../assets/css/tables.css">
+    <style>
+      body { padding: 24px; }
+      h1, h2 { margin: 0 0 12px; }
+      section { margin: 18px 0; }
+      pre { direction: ltr; text-align: left; white-space: pre-wrap; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 460px; overflow: auto; }
+      .pass { color: #146b5f; font-weight: 700; }
+      .fail { color: #b42318; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <h1>اعتبارسنجی داده واقعی</h1>
+    <p>این صفحه فایل‌های واقعی `sample-data` را با همان سرویس‌های داشبورد می‌خواند.</p>
+    <button id="exportBtn" class="button button-primary" type="button" disabled>خروجی JSON</button>
+    <div id="status" class="notice">در حال اجرا...</div>
+    <main id="results"></main>
+    <script src="../assets/vendor/xlsx.full.min.js"></script>
+    <script src="../assets/vendor/mammoth.browser.min.js"></script>
+    <script type="module">
+      import { runRealDataValidation } from "./real-data-validation-core.js";
+      import { downloadText, escapeHtml } from "../assets/js/utils/helpers.js";
+
+      const status = document.getElementById("status");
+      const results = document.getElementById("results");
+      const exportBtn = document.getElementById("exportBtn");
+      let diagnostic = null;
+
+      function table(rows) {
+        if (!rows.length) return "<div class='empty-state'>بدون داده</div>";
+        const headers = Object.keys(rows[0]);
+        return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${headers.map((h) => `<td>${escapeHtml(Array.isArray(row[h]) ? row[h].join(", ") : row[h])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+      }
+
+      function render(data) {
+        const failed = data.checks.filter((check) => !check.pass);
+        status.className = `notice ${failed.length ? "warning" : ""}`;
+        status.textContent = failed.length ? `${failed.length} بررسی ناموفق است.` : "همه بررسی‌های اصلی موفق بودند.";
+        results.innerHTML = `
+          <section><h2>بررسی‌ها</h2>${table(data.checks.map((c) => ({ check: c.name, result: c.pass ? "pass" : "fail", actual: c.actual })))}</section>
+          <section><h2>فایل‌ها</h2><pre>${escapeHtml(JSON.stringify(data.files, null, 2))}</pre></section>
+          <section><h2>Jira</h2><pre>${escapeHtml(JSON.stringify(data.jira, null, 2))}</pre></section>
+          <section><h2>QA Return</h2><pre>${escapeHtml(JSON.stringify(data.qaReturn, null, 2))}</pre></section>
+          <section><h2>Capacity</h2>${table(data.capacity.people.map((p) => ({ columnIndex: p.columnIndex, originalHeader: p.originalHeader, normalizedHeader: p.normalizedHeader, resolvedPerson: p.resolvedPerson, role: p.role, totalCapacity: p.availableCapacity, technical: p.technical, plannedCapacity: p.plannedCapacity, unplannedCapacity: p.unplannedCapacity, mappingStatus: p.mappingStatus })))}</section>
+          <section><h2>KPI DOCX</h2><pre>${escapeHtml(JSON.stringify(data.kpi, null, 2))}</pre></section>
+          <section><h2>نگاشت‌ها</h2>${table(data.mappings)}</section>
+          <section><h2>KPI مدیریت</h2>${table(data.metricDetails.management.map(({ issueKeys, ...row }) => ({ ...row, issueCount: issueKeys.length })))}</section>
+          <section><h2>KPI افراد</h2><pre>${escapeHtml(JSON.stringify(data.metricDetails.people, null, 2))}</pre></section>
+          <section><h2>ممیزی و تطبیق داده‌ها</h2><pre>${escapeHtml(JSON.stringify(data.reconciliation, null, 2))}</pre></section>
+          <section><h2>کیفیت داده</h2><pre>${escapeHtml(JSON.stringify(data.dataQuality, null, 2))}</pre></section>`;
+      }
+
+      try {
+        diagnostic = await runRealDataValidation();
+        render(diagnostic);
+        exportBtn.disabled = false;
+      } catch (error) {
+        status.className = "notice error";
+        status.textContent = error.stack || error.message;
+      }
+
+      exportBtn.addEventListener("click", () => {
+        downloadText("real-data-validation.json", JSON.stringify(diagnostic, null, 2), "application/json");
+      });
+    </script>
+  </body>
+</html>

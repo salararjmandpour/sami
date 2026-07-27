@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>داشبورد KPI جیرا</title>
+    <link rel="stylesheet" href="./assets/css/reset.css">
+    <link rel="stylesheet" href="./assets/css/variables.css">
+    <link rel="stylesheet" href="./assets/css/layout.css">
+    <link rel="stylesheet" href="./assets/css/components.css">
+    <link rel="stylesheet" href="./assets/css/dashboard.css">
+    <link rel="stylesheet" href="./assets/css/tables.css">
+    <link rel="stylesheet" href="./assets/css/responsive.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>داشبورد KPI تیم نرم‌افزار و QA</h1>
+        <p>تمام فایل‌ها داخل مرورگر شما پردازش می‌شوند و به هیچ سروری ارسال نمی‌شوند.</p>
+      </div>
+      <div class="header-actions">
+        <button id="exportBackupBtn" class="button button-secondary" type="button">خروجی پشتیبان</button>
+        <label class="button button-secondary file-action">
+          بازیابی پشتیبان
+          <input id="restoreBackupInput" type="file" accept="application/json" aria-label="بازیابی پشتیبان JSON">
+        </label>
+        <button id="clearDataBtn" class="button button-danger" type="button">حذف همه داده‌ها</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <nav class="side-nav" aria-label="بخش‌ها">
+        <button class="nav-item active" data-section="upload">بارگذاری</button>
+        <button class="nav-item" data-section="mapping">نگاشت‌ها</button>
+        <button class="nav-item" data-section="management">مدیریت</button>
+        <button class="nav-item" data-section="scrum">اسکرام</button>
+        <button class="nav-item" data-section="quality">کیفیت داده</button>
+        <button class="nav-item" data-section="reconciliation">ممیزی و تطبیق داده‌ها</button>
+        <button class="nav-item" data-section="history">تاریخچه</button>
+        <button class="nav-item" data-section="settings">تنظیمات</button>
+      </nav>
+
+      <section class="content">
+        <div id="notificationRegion" class="notification-region" aria-live="polite" role="status"></div>
+
+        <section id="upload" class="page-section active">
+          <div class="section-heading">
+            <h2>بارگذاری فایل‌ها</h2>
+            <p>فایل خروجی Jira، ظرفیت تیم و سند KPI را جداگانه انتخاب کنید.</p>
+          </div>
+          <div class="workflow-panel" aria-labelledby="workflowTitle">
+            <h3 id="workflowTitle">مراحل تولید گزارش</h3>
+            <ol>
+              <li>فایل خروجی Jira را انتخاب کنید.</li>
+              <li>فایل ظرفیت اعضای تیم را انتخاب کنید.</li>
+              <li>فایل تعریف KPI را انتخاب کنید.</li>
+              <li>نگاشت ستون‌ها و اعضای تیم را بررسی کنید.</li>
+              <li>گزارش را تولید کنید.</li>
+            </ol>
+            <p class="privacy-note">تمام فایل‌ها داخل مرورگر شما پردازش می‌شوند و به هیچ سروری ارسال نمی‌شوند.</p>
+          </div>
+          <div class="upload-grid">
+            <label class="upload-box">
+              <span>فایل Jira</span>
+              <input id="jiraFile" type="file" accept=".xlsx,.xls,.csv,.tsv">
+              <small id="jiraFileMeta" data-file-status="jira">انتخاب نشده</small>
+            </label>
+            <label class="upload-box">
+              <span>فایل ظرفیت</span>
+              <input id="capacityFile" type="file" accept=".xlsx,.xls,.csv,.tsv">
+              <small id="capacityFileMeta" data-file-status="capacity">انتخاب نشده</small>
+            </label>
+            <label class="upload-box">
+              <span>فایل KPI DOCX</span>
+              <input id="kpiFile" type="file" accept=".docx">
+              <small id="kpiFileMeta" data-file-status="kpi">انتخاب نشده</small>
+            </label>
+          </div>
+          <form id="reportMetaForm" class="meta-form">
+            <label>نام تیم<input id="teamName" type="text" placeholder="مثلا تیم محصول"></label>
+            <label>نام اسپرینت<input id="sprintName" type="text" placeholder="از نام شیت پیشنهاد می‌شود"></label>
+            <label>از تاریخ<input id="dateFrom" type="date"></label>
+            <label>تا تاریخ<input id="dateTo" type="date"></label>
+          </form>
+          <div class="action-row">
+            <button id="parseBtn" class="button" type="button">خواندن و پیش‌نمایش</button>
+            <button id="generateBtn" class="button button-primary" type="button" disabled aria-describedby="generateDisabledReason">تولید گزارش</button>
+          </div>
+          <p id="generateDisabledReason" class="status-note" aria-live="polite">برای تولید گزارش، هر سه فایل را انتخاب و سپس نگاشت‌ها را بررسی کنید.</p>
+          <div id="filePreview" class="preview-panel empty-state">هنوز فایلی خوانده نشده است.</div>
+        </section>
+
+        <section id="mapping" class="page-section">
+          <div class="section-heading"><h2>نگاشت‌ها</h2><p>ستون‌ها و افراد را بازبینی و ذخیره کنید.</p></div>
+          <div class="split-layout">
+            <div>
+              <h3>نگاشت فیلدها</h3>
+              <div id="fieldMappingTable"></div>
+              <button id="saveFieldMappingsBtn" class="button button-primary" type="button">ذخیره نگاشت فیلدها</button>
+            </div>
+            <div>
+              <h3>نگاشت افراد</h3>
+              <div id="personMappingTable"></div>
+              <div class="action-row">
+                <button id="savePersonMappingsBtn" class="button button-primary" type="button">ذخیره نگاشت افراد</button>
+                <button id="exportMappingsBtn" class="button button-secondary" type="button">خروجی JSON</button>
+                <label class="button button-secondary file-action">ورود JSON<input id="importMappingsInput" type="file" accept="application/json" aria-label="ورود نگاشت‌ها از JSON"></label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="management" class="page-section">
+          <div class="section-heading"><h2>داشبورد مدیریت</h2><p id="managementSubtitle">گزارشی انتخاب نشده است.</p></div>
+          <div id="filters" class="filters"></div>
+          <div id="qualitySummaryPanel"></div>
+          <div id="sourceActionsPanel"></div>
+          <div id="managementCards" class="kpi-grid"></div>
+          <div class="chart-grid">
+            <canvas id="capacityChart"></canvas>
+            <canvas id="workMixChart"></canvas>
+            <canvas id="deliveryChart"></canvas>
+            <canvas id="qaChart"></canvas>
+            <div class="chart-panel">
+              <canvas id="blockedChart"></canvas>
+              <p id="blockedChartNote" class="status-note"></p>
+            </div>
+          </div>
+          <div id="issueTable"></div>
+        </section>
+
+        <section id="scrum" class="page-section">
+          <div class="section-heading"><h2>داشبورد اسکرام</h2><p>نمای توسعه‌دهنده‌ها و QA بر اساس نگاشت افراد.</p></div>
+          <div id="scrumDashboards"></div>
+        </section>
+
+        <section id="quality" class="page-section">
+          <div class="section-heading"><h2>گزارش کیفیت داده</h2><p>خطاها، هشدارها و موارد قابل بررسی.</p></div>
+          <div id="qualityReport" class="quality-list empty-state">گزارشی وجود ندارد.</div>
+        </section>
+
+        <section id="reconciliation" class="page-section">
+          <div class="section-heading"><h2>ممیزی و تطبیق داده‌ها</h2><p>ردیابی اختلاف‌ها تا سطرهای واقعی Jira و ظرفیت.</p></div>
+          <div class="action-row">
+            <button id="exportReconciliationBtn" class="button button-secondary" type="button">خروجی JSON ممیزی</button>
+          </div>
+          <div id="reconciliationReport" class="preview-panel empty-state">هنوز گزارشی انتخاب نشده است.</div>
+        </section>
+
+        <section id="history" class="page-section">
+          <div class="section-heading"><h2>تاریخچه گزارش‌ها</h2><p>گزارش‌ها در IndexedDB مرورگر ذخیره می‌شوند.</p></div>
+          <div id="historyList"></div>
+        </section>
+
+        <section id="settings" class="page-section">
+          <div class="section-heading"><h2>تعطیلات و تنظیمات</h2><p>تقویم کاری ایران بدون API اینترنتی استفاده می‌شود.</p></div>
+          <div id="holidayManager"></div>
+          <div class="action-row">
+            <button id="addHolidayBtn" class="button" type="button">افزودن تعطیلی</button>
+            <button id="exportHolidaysBtn" class="button button-secondary" type="button">خروجی تعطیلات</button>
+            <label class="button button-secondary file-action">ورود تعطیلات<input id="importHolidaysInput" type="file" accept="application/json" aria-label="ورود تعطیلات از JSON"></label>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./assets/vendor/chart.min.js"></script>
+    <script src="./assets/vendor/xlsx.full.min.js"></script>
+    <script src="./assets/vendor/mammoth.browser.min.js"></script>
+    <script src="./assets/vendor/idb.min.js"></script>
+    <script type="module" src="./assets/js/app.js"></script>
+  </body>
+</html>

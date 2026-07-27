@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>آزمون داشبورد KPI</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/variables.css">
+    <link rel="stylesheet" href="../assets/css/components.css">
+    <style>
+      body { padding: 24px; }
+      .pass { color: #146b5f; }
+      .fail { color: #b42318; }
+      li { margin: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>آزمون‌های مرورگری</h1>
+    <p id="summary">در حال اجرا...</p>
+    <ol id="results"></ol>
+    <script src="../assets/vendor/xlsx.full.min.js"></script>
+    <script src="../assets/vendor/mammoth.browser.min.js"></script>
+    <script type="module" src="./parser-tests.js"></script>
+    <script type="module" src="./normalization-tests.js"></script>
+    <script type="module" src="./calculation-tests.js"></script>
+    <script type="module" src="./calendar-tests.js"></script>
+    <script type="module" src="./real-data-regression-tests.js"></script>
+    <script type="module" src="./reconciliation-tests.js"></script>
+    <script type="module" src="./ui-production-tests.js"></script>
+    <script type="module">
+      setTimeout(async () => {
+        const tests = window.__tests || [];
+        let passed = 0;
+        const list = document.getElementById("results");
+        for (const test of tests) {
+          const item = document.createElement("li");
+          try {
+            await test.fn();
+            passed += 1;
+            item.className = "pass";
+            item.textContent = `قبول: ${test.name}`;
+          } catch (error) {
+            item.className = "fail";
+            item.textContent = `خطا: ${test.name} - ${error.message}`;
+          }
+          list.append(item);
+        }
+        document.getElementById("summary").textContent = `${passed} قبول / ${tests.length - passed} خطا / ${tests.length} کل`;
+      }, 250);
+    </script>
+  </body>
+</html>
