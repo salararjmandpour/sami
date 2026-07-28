@@ -3,7 +3,7 @@
     "id": "real-data-validation",
     "teamName": "Real Data",
     "sprintName": "sprint 26.1",
-    "createdAt": "2026-07-28T11:25:26.110Z",
+    "createdAt": "2026-07-28T11:36:01.607Z",
     "calculationVersion": "1.1.0"
   },
   "fileMetadata": {
@@ -12286,7 +12286,7 @@
     "errors": [],
     "warnings": [
       {
-        "id": "00d3d6d1-9158-4925-b8ac-57788f95ee76",
+        "id": "8e302927-5167-4b9b-9751-a2558fd46dc3",
         "severity": "warning",
         "code": "Multiple Work Categories Matched",
         "message": "PODCM-4757: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -12306,7 +12306,7 @@
         ]
       },
       {
-        "id": "03c0ac8d-a34b-4792-8c86-179c2e0f0a49",
+        "id": "84b70265-ea44-4e96-9f4e-90fc79c5634f",
         "severity": "warning",
         "code": "Multiple Work Categories Matched",
         "message": "PODCM-4756: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -12326,7 +12326,7 @@
         ]
       },
       {
-        "id": "d2ef16f3-c7a1-4779-af79-34da244d16bf",
+        "id": "266d8701-da7e-447f-afaf-cb1e2f2e7864",
         "severity": "warning",
         "code": "Non-productive issue with no Work Logged",
         "message": "PODCM-4747: block issue has no Work Logged",
@@ -12345,7 +12345,7 @@
         ]
       },
       {
-        "id": "dee22706-e28b-47ac-9f23-477a840e73d7",
+        "id": "8a319cbb-a8ec-486d-9610-2de16c2553ff",
         "severity": "warning",
         "code": "Non-productive issue with no Work Logged",
         "message": "PODCM-4743: meeting issue has no Work Logged",
@@ -12364,7 +12364,7 @@
         ]
       },
       {
-        "id": "98374567-de3a-4a0c-bbad-8fa960836573",
+        "id": "5e3b76c6-5e3c-431d-80ac-29e043ea9fba",
         "severity": "warning",
         "code": "Non-productive issue with no Work Logged",
         "message": "PODCM-4292: meeting issue has no Work Logged",
@@ -12383,7 +12383,7 @@
         ]
       },
       {
-        "id": "e582011d-bdbe-4bab-b781-e9bfbc7e19bf",
+        "id": "612caa1f-02a9-4f46-8bb3-f869a8128478",
         "severity": "warning",
         "code": "Multiple Work Categories Matched",
         "message": "PODCM-4271: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -12403,7 +12403,7 @@
         ]
       },
       {
-        "id": "a10c577f-cdab-4c04-a9e5-32acc4c9f00c",
+        "id": "168ee877-0cf2-4195-893f-2e4422fa53bf",
         "severity": "warning",
         "code": "Multiple Work Categories Matched",
         "message": "PODCM-4270: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -33674,7 +33674,7 @@
       "unitConversionsUsed": [
         "Excel [h]:mm duration = serial day fraction * 24"
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "totalPlannedIssueCount": {
@@ -33976,7 +33976,7 @@
           "testEstimate": 0
         }
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "totalStartedPlannedIssueCount": {
@@ -34256,7 +34256,7 @@
           "testEstimate": 0
         }
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "totalUnplannedIssueCount": {
@@ -34288,7 +34288,7 @@
           "testEstimate": 1
         }
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "totalStartedUnplannedIssueCount": {
@@ -34325,7 +34325,7 @@
           "testEstimate": 1
         }
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "plannedStartRate": {
@@ -34605,7 +34605,7 @@
           "testEstimate": 0
         }
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "unplannedStartRate": {
@@ -34637,7 +34637,7 @@
           "testEstimate": 1
         }
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "plannedCapacityUtilization": {
@@ -34678,7 +34678,7 @@
         }
       ],
       "capacitySource": "capacity-file/fallback by person",
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "unplannedCapacityUtilization": {
@@ -34695,7 +34695,7 @@
       "excludedIssueCount": 0,
       "exclusionReasons": [],
       "capacitySource": "capacity-file/fallback by person",
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "deliveryRate": {
@@ -34734,7 +34734,7 @@
       "unitConversionsUsed": [
         "Excel [h]:mm duration = serial day fraction * 24"
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     },
     "estimationAccuracy": {
@@ -34883,7 +34883,7 @@
       "unitConversionsUsed": [
         "Excel [h]:mm duration = serial day fraction * 24"
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0",
       "rawEstimationAccuracy": 65.22854577329285,
       "rawFormula": "Raw Estimated Hours / Raw Work Logged Hours * 100",
@@ -34930,109 +34930,109 @@
       "unitConversionsUsed": [
         "Excel [h]:mm duration = serial day fraction * 24"
       ],
-      "calculationTimestamp": "2026-07-28T11:25:26.408Z",
+      "calculationTimestamp": "2026-07-28T11:36:01.902Z",
       "calculationVersion": "1.1.0"
     }
   },
   "dataQualityIssues": [
     {
-      "id": "66e4d46c-4fb3-4465-bddc-b098416fc482",
+      "id": "f1b4493c-4611-4731-aadf-47c36bbe61f0",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Fix Version/s"
     },
     {
-      "id": "7c1bf44a-a33c-4462-8edc-b4cd501e1a6d",
+      "id": "1b727452-84ea-410d-9788-241933ab36c6",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Time Spent"
     },
     {
-      "id": "33dafac1-587c-4dc0-8422-356f58342560",
+      "id": "5b0c3d0f-fd56-422c-b0af-d8558faf9f2c",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Σ Work Logged AmirReza"
     },
     {
-      "id": "601c63cd-5889-427d-b0ad-8e1b72e42a59",
+      "id": "1ce2d542-13a5-469e-b05a-7117a25271bb",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Work Logged Omid"
     },
     {
-      "id": "5676f963-85a3-4c27-903a-29c65bf3e754",
+      "id": "f2f9d170-63f0-4fc6-95ca-f6fd447bbeb5",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Work Logged mozhdeh"
     },
     {
-      "id": "2c91d02d-ea25-4b5f-bd00-1ee8329b561a",
+      "id": "79732f08-b5c1-4d1c-83ba-49c07535a4ae",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Work Logged behzad"
     },
     {
-      "id": "acea4acd-1366-4dc0-9237-51c8851da200",
+      "id": "67193b55-d287-4900-b533-759aec6e0c2a",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Work Today abbas"
     },
     {
-      "id": "ddc92191-31ab-454d-8293-3198f7a0771f",
+      "id": "2b8a9774-5c5d-4d7f-8164-047136660826",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Work Logged sepideh"
     },
     {
-      "id": "185507b0-3d80-466a-a68f-f454fb471822",
+      "id": "4cc73019-4d1b-4be0-9d08-619b2c43c022",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Work Today Ali"
     },
     {
-      "id": "36dd0dc8-9224-4408-9b09-4e489abf385a",
+      "id": "1da04919-e810-4248-9aae-8311cd956065",
       "severity": "info",
       "code": "Unknown header",
       "message": "Unknown header: Time in Status"
     },
     {
-      "id": "c0932e42-663f-44a0-adba-ce50cc0f3344",
+      "id": "ddd0752d-4599-472c-90be-81b9e8f8f3fb",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "امید: planned + unplanned = 61, total = 92.40000000000002"
     },
     {
-      "id": "987df59a-a6d0-4f58-adf2-ac842e591fc9",
+      "id": "6e0ea4d5-9dec-4774-8a3f-f781bf572b25",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "مژده: planned + unplanned = 101, total = 100.10000000000002"
     },
     {
-      "id": "0e7cbde1-d333-4bc7-b200-8f96fe769f6b",
+      "id": "7bdb99b6-2034-4d31-bba2-05d7e57399a4",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "بهزاد: planned + unplanned = 101, total = 100.10000000000002"
     },
     {
-      "id": "90ee9dff-f462-4f10-b4d8-6520299f82f1",
+      "id": "d83b56e7-1663-41b8-a2b7-0d58ff31220b",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "امیر رضا: planned + unplanned = 81, total = 92.40000000000002"
     },
     {
-      "id": "f665eeeb-3483-4ff6-be7f-9b857dfdeb35",
+      "id": "02214c90-09d3-4573-94a6-a2e542aab156",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "عباس: planned + unplanned = 101, total = 100.10000000000002"
     },
     {
-      "id": "0186746b-5666-4256-98e8-90bdbc54da56",
+      "id": "83d285ec-4975-46f7-a559-1cb9ed9fccc5",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "سپیده: planned + unplanned = 92, total = 92.40000000000002"
     },
     {
-      "id": "641edf48-e06a-4949-8227-933c64b2b7ef",
+      "id": "45cef652-c92e-4739-89e0-83fc53fbeea3",
       "severity": "warning",
       "code": "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity",
       "message": "علی: planned + unplanned = 101, total = 100.10000000000002"
@@ -35045,7 +35045,7 @@
       "issueKey": "PODCM-3527"
     },
     {
-      "id": "7e70b5f4-ef5c-49d9-8265-ecc3720ce6d4",
+      "id": "308c98a8-c9d5-469d-beb1-b477f9c2651b",
       "severity": "warning",
       "code": "Multiple Work Categories Matched",
       "message": "PODCM-4757: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -35065,7 +35065,7 @@
       ]
     },
     {
-      "id": "11e9b5c7-5413-48c5-b5cc-a5dc6155b735",
+      "id": "b4e542cc-f010-4a23-a1f2-33a3fac76539",
       "severity": "warning",
       "code": "Multiple Work Categories Matched",
       "message": "PODCM-4756: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -35085,7 +35085,7 @@
       ]
     },
     {
-      "id": "5da2231b-6569-4a50-b72a-39c2dca9a29c",
+      "id": "975c0258-39bd-4587-87f3-3579cace7549",
       "severity": "warning",
       "code": "Non-productive issue with no Work Logged",
       "message": "PODCM-4747: block issue has no Work Logged",
@@ -35104,7 +35104,7 @@
       ]
     },
     {
-      "id": "8cd64517-5605-4c82-9b51-efbb2d866e03",
+      "id": "278b66d1-a911-41e8-9a22-86c339f76d7d",
       "severity": "warning",
       "code": "Non-productive issue with no Work Logged",
       "message": "PODCM-4743: meeting issue has no Work Logged",
@@ -35123,7 +35123,7 @@
       ]
     },
     {
-      "id": "2e487904-c50f-4c78-8f35-91f2cf63f5e0",
+      "id": "43cd130b-d4ba-48aa-89c4-9754a43dfceb",
       "severity": "warning",
       "code": "Non-productive issue with no Work Logged",
       "message": "PODCM-4292: meeting issue has no Work Logged",
@@ -35142,7 +35142,7 @@
       ]
     },
     {
-      "id": "80dbf7e9-3571-4dd5-8fa1-303c00e48665",
+      "id": "4bc1fa72-4447-4143-9363-9919058f7bba",
       "severity": "warning",
       "code": "Multiple Work Categories Matched",
       "message": "PODCM-4271: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -35162,7 +35162,7 @@
       ]
     },
     {
-      "id": "4caa598b-86de-404f-aab4-cdc48372af6d",
+      "id": "50ed3eb0-6100-4a24-ae18-0a83f75dc70b",
       "severity": "warning",
       "code": "Multiple Work Categories Matched",
       "message": "PODCM-4270: matched technical, version; selected technical by priority block > meeting > technical > version > productive",
@@ -35182,24 +35182,24 @@
       ]
     },
     {
-      "id": "35ce2e52-2321-4b64-bb7b-a140651d8930",
+      "id": "5c878954-3a27-48dd-8811-dbd54dd63bd5",
       "severity": "warning",
       "code": "Unmatched QA Return Key",
       "message": "QA Return key not found in main Jira dataset: RCA-3299"
     },
     {
-      "id": "64a6ac65-5556-409e-baea-804a4c23938a",
+      "id": "7ba39996-339e-4843-9ce4-77a8638f7fe4",
       "severity": "warning",
       "code": "Unmatched QA Return Key",
       "message": "QA Return key not found in main Jira dataset: RCA-3288"
     },
     {
-      "id": "239d5d48-a993-4882-a18f-69a5069872c5",
+      "id": "d2fff6bc-35de-41df-a044-968a6a7191e4",
       "severity": "warning",
       "code": "Unmatched QA Return Key",
       "message": "QA Return key not found in main Jira dataset: PODCM-4922"
     }
   ],
   "reconciliationStatus": "warning",
-  "generatedAt": "2026-07-28T11:25:26.408Z"
+  "generatedAt": "2026-07-28T11:36:01.902Z"
 }

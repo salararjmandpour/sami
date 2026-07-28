@@ -18,7 +18,7 @@ export function renderScrumDashboards(people) {
   }
   target.innerHTML = people.map((person, personIndex) => `<section class="person-dashboard panel">
     <h3>${escapeHtml(person.name)} <span class="badge">${escapeHtml(person.role)}</span></h3>
-    <div class="kpi-grid">${personKeysForRole(person.role).map((key) => `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(person.metrics[key]?.displayValue || "N/A")}</div>${PERSON_DRILL_KEYS[key] && person.planningDrillDown?.[PERSON_DRILL_KEYS[key]] ? `<button class="button button-secondary drill-button" data-person-index="${personIndex}" data-person-drill="${escapeHtml(key)}" type="button">Ø¬Ø²Ø¦ÛŒØ§Øª</button>` : ""}</article>`).join("")}</div>
+    <div class="kpi-grid">${personKeysForRole(person.role).map((key) => `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(person.metrics[key]?.displayValue || "N/A")}</div>${PERSON_DRILL_KEYS[key] && person.planningDrillDown?.[PERSON_DRILL_KEYS[key]] ? `<button class="button button-secondary drill-button" data-person-index="${personIndex}" data-person-drill="${escapeHtml(key)}" type="button">جزئیات</button>` : ""}</article>`).join("")}</div>
   </section>`).join("");
   target.querySelectorAll("[data-person-drill]").forEach((button) => button.addEventListener("click", () => {
     const person = people[Number(button.dataset.personIndex)];
@@ -49,7 +49,7 @@ function showPersonDrillDown(person, metricKey, rows) {
       includedIssueKeys: rows.map((row) => row.issueKey),
       rows
     }, null, 2))}</pre>
-    <button class="button button-primary">Ø¨Ø³ØªÙ†</button>
+    <button class="button button-primary">بستن</button>
   </form>`;
   document.body.append(dialog);
   dialog.showModal();

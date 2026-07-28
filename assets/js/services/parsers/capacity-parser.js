@@ -4,15 +4,8 @@ import { normalizeString, comparable, looseComparable } from "../normalization/s
 import { normalizeHours } from "../normalization/unit-normalizer.js";
 import { detectFileSignature } from "../../utils/file-signature.js";
 
-const LEGACY_SUMMARY_ALIASES = {
-  total: ["Ú©Ù„ Ø¸Ø±ÙÛŒØª", "Ú©Ù„ Ø©Ø±ÙÛŒØª", "total capacity", "prepared capacity"],
-  technical: ["technical"],
-  planned: ["Ø¸Ø±ÙÛŒØª Ù¾Ù„Ù†", "Ø¸Ø±ÙÛŒØª Ù¾Ù„Ø§Ù†", "planned capacity"],
-  unplanned: ["Ø¸Ø±ÙÛŒØª Ø¢Ù†Ù¾Ù„Ù†", "Ø¸Ø±ÙÛŒØª Ø§Ù†Ù¾Ù„Ù†", "unplanned capacity"]
-};
-
 function findSummaryRow(rows, canonical, { fuzzyTotal = false } = {}) {
-  const aliases = [...(LEGACY_SUMMARY_ALIASES[canonical] || []), ...(CAPACITY_COLUMN_ALIASES[canonical] || [])];
+  const aliases = CAPACITY_COLUMN_ALIASES[canonical] || [];
   const comparableAliases = aliases.map(comparable);
   const looseAliases = aliases.map(looseComparable);
   return rows.find((row) => {
@@ -20,7 +13,7 @@ function findSummaryRow(rows, canonical, { fuzzyTotal = false } = {}) {
     const looseKey = looseComparable(row[0]);
     return comparableAliases.includes(key)
       || looseAliases.includes(looseKey)
-      || (fuzzyTotal && key.startsWith("Ú©Ù„") && (key.includes("Ø±ÙÛŒØª") || key.includes("Ø¸Ø±ÙÛŒØª")))
+      || (fuzzyTotal && key.startsWith("کل") && (key.includes("رفیت") || key.includes("ظرفیت")))
       || (fuzzyTotal && looseKey.startsWith("کل") && looseKey.includes("ظرفیت"));
   });
 }
@@ -48,7 +41,7 @@ function diagnosticsFor(sheet, sheetName) {
 }
 
 export async function parseCapacityWorkbook(file, arrayBuffer) {
-  if (!window.XLSX) throw new Error("Ú©ØªØ§Ø¨Ø®Ø§Ù†Ù‡ SheetJS Ø¨Ø§Ø±Ú¯Ø°Ø§Ø±ÛŒ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.");
+  if (!window.XLSX) throw new Error("کتابخانه SheetJS بارگذاری نشده است.");
   const signature = detectFileSignature(arrayBuffer);
   console.group?.("Capacity Parsing");
   const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: false, cellNF: true, cellFormula: true });
@@ -85,7 +78,7 @@ export async function parseCapacityWorkbook(file, arrayBuffer) {
       originalHeader,
       normalizedHeader: normalizeString(displayName),
       mergedParent,
-      capacityName: normalizeString(displayName) || `Ø³ØªÙˆÙ† Ø¨Ø¯ÙˆÙ† Ù†Ø§Ù… ${columnIndex + 1}`,
+      capacityName: normalizeString(displayName) || `ستون بدون نام ${columnIndex + 1}`,
       availableCapacity: total,
       technical: technicalRow ? normalizeHours(technicalRow[columnIndex]).hours : null,
       plannedCapacity: planned,

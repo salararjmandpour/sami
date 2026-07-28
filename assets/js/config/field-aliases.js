@@ -15,6 +15,6 @@ export const FIELD_ALIASES = {
   planType: ["Planned Release Management Task", "Planning Type"],
   labels: ["Labels", "Label"],
   blockedTime: ["Time in block", "Blocked Time"],
-  totalWorkLogged: ["Σ Time Spent", "Î£ Time Spent", "ÃŽÂ£ Time Spent", "Time Spent", "Work Logged"],
+  totalWorkLogged: ["Σ Time Spent", "Time Spent", "Work Logged"],
   storyPoints: ["Story Points", "Story Point"]
 };
