@@ -341,11 +341,78 @@ function buildDrillDown(context, estimate, workLog, blocked) {
   const breakdown = context.report?.calculatedMetrics?.management?.workLogBreakdown || buildManagementWorkLogBreakdown(context.issues, context.personMappings, context.fieldMappings, context.report?.workCategoryMapping);
   const rawAccuracy = estimate.management.totalEstimate && workLog.totals.managementWorkLogged ? estimate.management.totalEstimate / workLog.totals.managementWorkLogged * 100 : null;
   const productiveEstimated = context.report?.calculatedMetrics?.management?.productiveEstimatedHours ?? sum(context.issues.filter((issue) => breakdown.rows.find((row) => row.issueKey === issue.issueKey)?.workCategory === "productive").map((issue) => (issue.devEstimate || 0) + (issue.testEstimate || 0)));
+  const planning = context.report?.calculatedMetrics?.management?.planningDrillDown || {};
+  const kpiJson = context.report?.calculatedMetrics?.management?.kpiJson || {};
   return {
     capacityUtilization: drill("Capacity Utilization", "(Planned Dev + Unplanned Dev + Planned Test + Unplanned Test) / Total Available Capacity * 100", byPlan.planned.totalEstimate + byPlan.unplanned.totalEstimate, context.report?.calculatedMetrics?.management?.totalCapacity || null, [...byPlan.planned.issueKeys, ...byPlan.unplanned.issueKeys], ["Carry Over excluded from Capacity Utilization"], now),
+    totalPlannedIssueCount: issueDrill("Total Planned Issue Count", "Distinct planned issue keys.", planning.plannedIssueKeys || [], now),
+    totalStartedPlannedIssueCount: issueDrill("Total Started Planned Issue Count", "Distinct planned issue keys that reached In Progress or later.", planning.startedPlannedIssueKeys || [], now, kpiJson.startedPlannedIssueCount),
+    totalUnplannedIssueCount: issueDrill("Total Unplanned Issue Count", "Distinct unplanned issue keys.", planning.unplannedIssueKeys || [], now),
+    totalStartedUnplannedIssueCount: issueDrill("Total Started Unplanned Issue Count", "Distinct unplanned issue keys that reached In Progress or later.", planning.startedUnplannedIssueKeys || [], now, kpiJson.startedUnplannedIssueCount),
+    plannedStartRate: rateDrill("Planned Start Rate", "Started Planned Issue Count / Planned Issue Count * 100", planning.plannedIssueKeys || [], planning.startedPlannedIssueKeys || [], now),
+    unplannedStartRate: rateDrill("Unplanned Start Rate", "Started Unplanned Issue Count / Unplanned Issue Count * 100", planning.unplannedIssueKeys || [], planning.startedUnplannedIssueKeys || [], now),
+    plannedCapacityUtilization: capacityDrill(kpiJson.plannedCapacityUtilization, now),
+    unplannedCapacityUtilization: capacityDrill(kpiJson.unplannedCapacityUtilization, now),
     deliveryRate: drill("Delivery Rate", "Done planned/unplanned issues / planned/unplanned issues * 100", context.issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType) && issue.statusCanonical === "done").length, context.issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType)).length, context.issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType)).map((issue) => issue.issueKey), ["Carry Over excluded from Delivery Rate"], now),
     estimationAccuracy: drill("Productive Estimation Accuracy", "Productive Estimated Hours / Productive Work Logged Hours * 100", productiveEstimated, breakdown.totals.productiveWorkLoggedHours, context.issues.map((issue) => issue.issueKey), ["Non-productive work logs excluded from the displayed accuracy denominator and non-productive estimates excluded from numerator"], now, { rawEstimationAccuracy: rawAccuracy, rawFormula: "Raw Estimated Hours / Raw Work Logged Hours * 100", rawEstimatedHours: estimate.management.totalEstimate, rawWorkLoggedHours: workLog.totals.managementWorkLogged, productiveEstimatedHours: productiveEstimated, productiveWorkLoggedHours: breakdown.totals.productiveWorkLoggedHours, workLogBreakdown: breakdown.totals, interpretation: "Displayed accuracy uses productive issue estimate and productive work logged. Raw accuracy remains available here for audit." }),
     blockedTime: drill("Blocked Time", "Sum of Time in block converted from Excel duration to hours", blocked.distribution.total, null, blocked.rows.map((row) => row.issueKey), [], now)
+  };
+}
+
+function issueDrill(kpiName, formula, rows, timestamp, kpi = {}) {
+  const includedIssueKeys = rows.map((row) => row.issueKey);
+  return {
+    kpiName,
+    formula,
+    numerator: includedIssueKeys.length,
+    denominator: null,
+    contributingIssueCount: includedIssueKeys.length,
+    includedIssueCount: includedIssueKeys.length,
+    includedIssueKeys,
+    evaluatedIssueCount: kpi.evaluatedIssueCount ?? includedIssueKeys.length,
+    excludedIssueCount: kpi.excludedIssueCount ?? 0,
+    exclusionReasons: kpi.exclusionReasons || [],
+    rows,
+    calculationTimestamp: timestamp,
+    calculationVersion: CALCULATION_VERSION
+  };
+}
+
+function rateDrill(kpiName, formula, evaluatedRows, includedRows, timestamp) {
+  const includedIssueKeys = includedRows.map((row) => row.issueKey);
+  const excluded = evaluatedRows.filter((row) => !includedIssueKeys.includes(row.issueKey)).map((row) => row.issueKey);
+  return {
+    kpiName,
+    formula,
+    numerator: includedRows.length,
+    denominator: evaluatedRows.length,
+    contributingIssueCount: includedRows.length,
+    evaluatedIssueCount: evaluatedRows.length,
+    includedIssueCount: includedRows.length,
+    includedIssueKeys,
+    excludedIssueCount: excluded.length,
+    exclusionReasons: excluded.length ? [{ reason: "Never reached In Progress", issueKeys: excluded }] : [],
+    rows: includedRows,
+    calculationTimestamp: timestamp,
+    calculationVersion: CALCULATION_VERSION
+  };
+}
+
+function capacityDrill(kpi = {}, timestamp) {
+  return {
+    kpiName: kpi.kpiName || "Capacity Utilization",
+    formula: "Actual Productive Work / Capacity * 100",
+    numerator: kpi.numerator ?? null,
+    denominator: kpi.denominator ?? null,
+    contributingIssueCount: kpi.includedIssueKeys?.length || 0,
+    evaluatedIssueCount: (kpi.includedIssueKeys?.length || 0) + (kpi.excludedNonProductiveIssueKeys?.length || 0),
+    includedIssueCount: kpi.includedIssueKeys?.length || 0,
+    includedIssueKeys: kpi.includedIssueKeys || [],
+    excludedIssueCount: kpi.excludedNonProductiveIssueKeys?.length || 0,
+    exclusionReasons: kpi.excludedNonProductiveIssueKeys?.length ? [{ reason: "Non-productive work excluded", issueKeys: kpi.excludedNonProductiveIssueKeys }] : [],
+    capacitySource: kpi.capacitySource || "",
+    calculationTimestamp: timestamp,
+    calculationVersion: CALCULATION_VERSION
   };
 }
 

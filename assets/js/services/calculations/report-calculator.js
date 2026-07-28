@@ -58,7 +58,7 @@ function drillRows(issues, breakdown, mapping = null) {
       summary: issue.summary,
       person: mapping?.jiraName || issue.assignee || issue.qaOwner || "",
       role: mapping?.role || "",
-      planType: issue.planType,
+      planType: displayPlanType(issue.planType),
       currentStatus: issue.status,
       hasReachedInProgress: hasReachedInProgress(issue),
       startDetectionSource: startDetectionSource(issue),
@@ -68,6 +68,13 @@ function drillRows(issues, breakdown, mapping = null) {
       testEstimate: issue.testEstimate || 0
     };
   });
+}
+
+function displayPlanType(planType) {
+  if (planType === "carry_over") return "Carry Over";
+  if (planType === "planned") return "Planned";
+  if (planType === "unplanned") return "Unplanned";
+  return planType || "Unknown";
 }
 
 function kpiJson(kpiName, definition, result, unit, evaluatedIssues, includedIssues, excludedReasons = []) {

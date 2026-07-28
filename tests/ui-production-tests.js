@@ -1,6 +1,7 @@
 import { test, equal, ok } from "./test-helpers.js";
 import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js";
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
+import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
 
 const issues = [
   { issueKey: "A-1", statusCanonical: "done", planType: "planned", assignee: "Sara", qaOwner: "Ali", created: "2026-01-02" },
@@ -90,6 +91,43 @@ test("Upload readiness: enabled when required mappings and people are valid", ()
   };
   try {
     equal(evaluateGenerateReadiness({ jira: {}, capacity: {}, kpi: {} }).ready, true);
+  } finally {
+    globalThis.document = oldDocument;
+  }
+});
+
+test("Person dashboards expose new metric drill-down buttons", () => {
+  const oldDocument = globalThis.document;
+  const target = { innerHTML: "", querySelectorAll: () => [] };
+  globalThis.document = {
+    getElementById(id) {
+      return id === "scrumDashboards" ? target : null;
+    }
+  };
+  try {
+    renderScrumDashboards([{
+      name: "Dev A",
+      role: "developer",
+      metrics: {
+        plannedIssueCount: { displayValue: "1" },
+        startedPlannedIssueCount: { displayValue: "1" },
+        unplannedIssueCount: { displayValue: "0" },
+        startedUnplannedIssueCount: { displayValue: "0" },
+        carryOverWorkLogged: { displayValue: "2h" },
+        carryOver: { displayValue: "99h" }
+      },
+      planningDrillDown: {
+        plannedIssueKeys: [{ issueKey: "A-1", planType: "Planned" }],
+        startedPlannedIssueKeys: [{ issueKey: "A-1", planType: "Planned" }],
+        unplannedIssueKeys: [],
+        startedUnplannedIssueKeys: [],
+        carryOverLoggedIssueKeys: [{ issueKey: "C-1", planType: "Carry Over" }]
+      }
+    }]);
+    ok(target.innerHTML.includes('data-person-drill="plannedIssueCount"'));
+    ok(target.innerHTML.includes('data-person-drill="carryOverWorkLogged"'));
+    equal(target.innerHTML.includes(">Carry Over</h3><div class=\"kpi-value\">99h"), false);
+    equal(target.innerHTML.includes("carry_over"), false);
   } finally {
     globalThis.document = oldDocument;
   }
