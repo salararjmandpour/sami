@@ -7,6 +7,7 @@ export const FIELD_ALIASES = {
   qaOwner: ["Contact point", "Contact Point", "Content Point", "Content point"],
   created: ["Created", "Created Date"],
   firstInProgress: ["FirstInProgress", "First In Progress", "In Progress Date"],
+  statusHistory: ["Status History", "Jira Status History", "Transition History", "Transitions", "Status Transitions"],
   firstAutomationTest: ["FirstAutomationTest", "First Automation Test", "Automatic Test Date"],
   doneDate: ["Done Date", "DoneDate"],
   devEstimate: ["DevEstimat", "Dev Estimate", "Development Estimate"],

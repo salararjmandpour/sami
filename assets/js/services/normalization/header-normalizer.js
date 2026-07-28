@@ -1,10 +1,10 @@
-import { comparable, normalizeString } from "./string-normalizer.js";
+import { looseComparable, normalizeString } from "./string-normalizer.js";
 
 export function buildHeaderMap(headers, aliases) {
-  const normalizedHeaders = headers.map((header) => ({ original: header, key: comparable(header) }));
+  const normalizedHeaders = headers.map((header) => ({ original: header, key: looseComparable(header) }));
   const result = {};
   Object.entries(aliases).forEach(([canonical, names]) => {
-    const match = names.map(comparable).map((alias) => normalizedHeaders.find((header) => header.key === alias)).find(Boolean);
+    const match = names.map(looseComparable).map((alias) => normalizedHeaders.find((header) => header.key === alias)).find(Boolean);
     if (match) result[canonical] = match.original;
   });
   return result;

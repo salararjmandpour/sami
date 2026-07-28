@@ -22,6 +22,8 @@ export function normalizeJiraRows(rows, fieldMap, qaKeys, holidays, workingHours
       summary: normalizeString(get("summary")),
       status: normalizeString(get("status")),
       statusCanonical: normalizeStatus(get("status")),
+      statusHistory: normalizeString(get("statusHistory")),
+      transitionHistory: normalizeString(get("statusHistory")),
       assignee: normalizeString(get("assignee")),
       qaOwner: normalizeString(get("qaOwner")),
       planRaw: normalizeString(get("planType")),

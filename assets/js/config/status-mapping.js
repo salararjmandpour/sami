@@ -6,9 +6,11 @@ export const STATUS_MAP = {
   "automation test": "automation_test",
   "automatic test": "automation_test",
   "manual test": "manual_test",
+  qa: "qa",
   done: "done",
+  closed: "done",
+  resolved: "done",
   suspended: "suspended"
 };
 
 export const DEVELOPMENT_COMPLETED = new Set(["code_review", "automation_test", "manual_test", "done"]);
-

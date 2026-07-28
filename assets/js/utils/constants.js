@@ -1,7 +1,10 @@
 export const CALCULATION_VERSION = "1.1.0";
 export const REQUIRED_FIELDS = ["issueKey", "status"];
 export const KPI_CARD_ORDER = [
-  "capacityUtilization", "plannedWork", "unplannedWork", "carryOver", "deliveryRateDevelop",
+  "capacityUtilization", "totalPlannedCapacity", "totalUnplannedCapacity", "totalPlannedIssueCount",
+  "totalStartedPlannedIssueCount", "totalUnplannedIssueCount", "totalStartedUnplannedIssueCount",
+  "plannedStartRate", "unplannedStartRate", "plannedProductiveWork", "unplannedProductiveWork",
+  "plannedCapacityUtilization", "unplannedCapacityUtilization", "plannedWork", "unplannedWork", "carryOver", "deliveryRateDevelop",
   "deliveryRate", "submittedToQa", "qaReturnRate", "firstPassRate", "hotfixCount",
   "bugfixCount", "rawWorkLogged", "productiveWorkLogged", "blockWorkLogged", "meetingWorkLogged",
   "technicalVersionWorkLogged", "nonProductiveWorkLogged", "leadTime", "cycleTime", "blockedTime", "estimationAccuracy",
@@ -9,6 +12,26 @@ export const KPI_CARD_ORDER = [
 ];
 
 export const KPI_LABELS = {
+  totalCapacity: "Total Capacity",
+  plannedCapacity: "Planned Capacity",
+  unplannedCapacity: "Unplanned Capacity",
+  totalPlannedCapacity: "Total Planned Capacity",
+  totalUnplannedCapacity: "Total Unplanned Capacity",
+  plannedIssueCount: "Planned Issue Count",
+  startedPlannedIssueCount: "Started Planned Issue Count",
+  unplannedIssueCount: "Unplanned Issue Count",
+  startedUnplannedIssueCount: "Started Unplanned Issue Count",
+  totalPlannedIssueCount: "Total Planned Issue Count",
+  totalStartedPlannedIssueCount: "Total Started Planned Issue Count",
+  totalUnplannedIssueCount: "Total Unplanned Issue Count",
+  totalStartedUnplannedIssueCount: "Total Started Unplanned Issue Count",
+  plannedStartRate: "Planned Start Rate",
+  unplannedStartRate: "Unplanned Start Rate",
+  plannedProductiveWork: "Planned Productive Work",
+  unplannedProductiveWork: "Unplanned Productive Work",
+  plannedCapacityUtilization: "Planned Capacity Utilization",
+  unplannedCapacityUtilization: "Unplanned Capacity Utilization",
+  carryOverWorkLogged: "Carry Over Work Logged",
   capacityUtilization: "بهره‌برداری ظرفیت",
   plannedWork: "کار برنامه‌ریزی‌شده",
   unplannedWork: "کار خارج از برنامه",

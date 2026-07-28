@@ -22,3 +22,12 @@ export function normalizeString(value) {
 export function comparable(value) {
   return normalizeString(value).toLocaleLowerCase("fa-IR");
 }
+
+export function looseComparable(value) {
+  return comparable(value)
+    .replace(/[\u0640]/g, "")
+    .replace(/[\-_\u2010-\u2015/\\|،,.;:()[\]{}]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

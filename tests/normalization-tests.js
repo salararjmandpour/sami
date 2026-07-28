@@ -1,6 +1,6 @@
 import { test, equal, close } from "./test-helpers.js";
 import { normalizeNumber } from "../assets/js/services/normalization/number-normalizer.js";
-import { normalizePlanType, normalizeStatus } from "../assets/js/services/normalization/status-normalizer.js";
+import { hasReachedInProgress, normalizePlanType, normalizeStatus } from "../assets/js/services/normalization/status-normalizer.js";
 import { normalizeLabels } from "../assets/js/services/normalization/label-normalizer.js";
 import { buildHeaderMap } from "../assets/js/services/normalization/header-normalizer.js";
 import { FIELD_ALIASES } from "../assets/js/config/field-aliases.js";
@@ -11,11 +11,15 @@ test("Arabic digit conversion", () => equal(normalizeNumber("١٢٣"), 123));
 test("Plan normalization", () => equal(normalizePlanType("Plan"), "planned"));
 test("Unplan normalization", () => equal(normalizePlanType("Unplanned"), "unplanned"));
 test("Empty Carry Over classification", () => equal(normalizePlanType(" "), "carry_over"));
+test("Plan normalization ignores punctuation", () => equal(normalizePlanType(" planned. "), "planned"));
 test("Automatic Test normalization", () => equal(normalizeStatus("Automatic Test"), "automation_test"));
+test("Current In Progress is started", () => equal(hasReachedInProgress({ status: "In Progress" }), true));
+test("Current Done is started", () => equal(hasReachedInProgress({ status: "Done" }), true));
+test("Backlog with previous In Progress is started", () => equal(hasReachedInProgress({ status: "Backlog", statusHistory: "Ready > In Progress > Backlog" }), true));
+test("Never In Progress is not started", () => equal(hasReachedInProgress({ status: "Ready", statusHistory: "Draft > Ready" }), false));
 test("BugFix normalization", () => equal(normalizeLabels("Bug Fix").includes("bugfix"), true));
 test("HotFix normalization", () => equal(normalizeLabels("HotFix").includes("hotfix"), true));
 test("Contact Point alias mapping", () => equal(buildHeaderMap(["Contact Point"], FIELD_ALIASES).qaOwner, "Contact Point"));
 test("Content Point alias mapping", () => equal(buildHeaderMap(["Content Point"], FIELD_ALIASES).qaOwner, "Content Point"));
 test("0.0416666667 Excel day = 1 hour", () => close(normalizePossibleExcelHours(0.0416666667).hours, 1));
 test("0.125 Excel day = 3 hours", () => close(normalizePossibleExcelHours(0.125).hours, 3));
-

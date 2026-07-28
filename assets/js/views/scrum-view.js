@@ -1,7 +1,7 @@
 import { escapeHtml } from "../utils/helpers.js";
 import { KPI_LABELS } from "../utils/constants.js";
 
-const PERSON_KEYS = ["availableCapacity", "plannedWork", "unplannedWork", "carryOver", "capacityUtilization", "deliveryRateDevelop", "deliveryRate", "submittedToQa", "qaReturnCount", "qaReturnRate", "firstPassRate", "rawWorkLogged", "productiveWorkLogged", "blockWorkLogged", "meetingWorkLogged", "technicalVersionWorkLogged", "nonProductiveWorkLogged", "estimationAccuracy", "leadTime", "cycleTime", "blockedTime", "hotfixCount", "bugfixCount"];
+const PERSON_KEYS = ["totalCapacity", "plannedCapacity", "unplannedCapacity", "plannedIssueCount", "startedPlannedIssueCount", "unplannedIssueCount", "startedUnplannedIssueCount", "plannedProductiveWork", "unplannedProductiveWork", "plannedCapacityUtilization", "unplannedCapacityUtilization", "carryOverWorkLogged", "productiveWorkLogged", "nonProductiveWorkLogged", "availableCapacity", "plannedWork", "unplannedWork", "carryOver", "capacityUtilization", "deliveryRateDevelop", "deliveryRate", "submittedToQa", "qaReturnCount", "qaReturnRate", "firstPassRate", "rawWorkLogged", "blockWorkLogged", "meetingWorkLogged", "technicalVersionWorkLogged", "estimationAccuracy", "leadTime", "cycleTime", "blockedTime", "hotfixCount", "bugfixCount"];
 
 export function renderScrumDashboards(people) {
   const target = document.getElementById("scrumDashboards");
