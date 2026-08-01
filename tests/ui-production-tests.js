@@ -2,7 +2,8 @@ import { test, equal, ok } from "./test-helpers.js";
 import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js";
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
 import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
-import { buildReportWorkbookSheets } from "../assets/js/services/export-service.js";
+import { renderHistory } from "../assets/js/views/history-view.js";
+import { buildDataQualityWorkbookSheets, buildManagementWorkbookSheets, buildReportWorkbookSheets, buildScrumWorkbookSheets } from "../assets/js/services/export-service.js";
 import { deleteReport, getReport, resetReportApiProbe, saveReport } from "../assets/js/services/report-storage-service.js";
 
 const issues = [
@@ -152,6 +153,50 @@ test("Excel export: report workbook contains Persian summary and issue sheets", 
   equal(sheets[0].name, "Summary");
   ok(sheets[0].rows.flat().includes("تیم محصول"));
   ok(sheets.find((sheet) => sheet.name === "Issues").rows.flat().includes("جزئیات"));
+});
+
+test("Report history view exposes open and Excel export actions", () => {
+  const oldDocument = globalThis.document;
+  const target = { innerHTML: "" };
+  globalThis.document = {
+    getElementById(id) {
+      return id === "historyList" ? target : null;
+    }
+  };
+  try {
+    renderHistory([{ id: "r-1", teamName: "تیم محصول", sprintName: "26.1", createdAt: "2026-01-01T00:00:00.000Z" }]);
+    ok(target.innerHTML.includes("باز کردن گزارش"));
+    ok(target.innerHTML.includes("خروجی Excel گزارش"));
+    ok(target.innerHTML.includes('data-export-report="r-1"'));
+  } finally {
+    globalThis.document = oldDocument;
+  }
+});
+
+test("Section Excel exports include filtered context and scoped sheets", () => {
+  const filteredReport = {
+    id: "r-filtered",
+    teamName: "تیم محصول",
+    sprintName: "26.1",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    calculationVersion: "1.1.0",
+    normalizedData: { issues: [{ issueKey: "A-1", summary: "جزئیات", labels: [], qaReturned: false }] },
+    calculatedMetrics: {
+      management: { deliveryRate: { displayValue: "90%", value: 90, unit: "%" } },
+      people: [{ name: "سارا", role: "developer", metrics: { plannedWork: { displayValue: "4h", value: 4, unit: "h" } } }]
+    },
+    dataQuality: [{ severity: "warning", code: "sample", message: "نیاز به بررسی", issueKey: "A-1" }],
+    reconciliation: { reconciliationStatus: "warning" }
+  };
+  const filters = { person: "سارا", status: "done", planType: "planned" };
+  const management = buildManagementWorkbookSheets(filteredReport, filters);
+  const scrum = buildScrumWorkbookSheets(filteredReport, filters);
+  const quality = buildDataQualityWorkbookSheets(filteredReport, filters);
+  ok(management.some((sheet) => sheet.name === "Management KPI"));
+  ok(scrum.some((sheet) => sheet.name === "People KPI"));
+  ok(quality.some((sheet) => sheet.name === "Data Quality"));
+  ok(management[0].rows.flat().includes("سارا"));
+  ok(quality.find((sheet) => sheet.name === "Data Quality").rows.flat().includes("نیاز به بررسی"));
 });
 
 test("Report storage: API availability avoids IndexedDB fallback", async () => {

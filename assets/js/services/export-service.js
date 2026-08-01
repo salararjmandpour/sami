@@ -33,6 +33,18 @@ export function exportReportExcel(report) {
   exportXlsx(reportExcelFilename(report), buildReportWorkbookSheets(report));
 }
 
+export function exportManagementExcel(report, filters = {}) {
+  exportXlsx(scopedExcelFilename(report, "management"), buildManagementWorkbookSheets(report, filters));
+}
+
+export function exportScrumExcel(report, filters = {}) {
+  exportXlsx(scopedExcelFilename(report, "scrum"), buildScrumWorkbookSheets(report, filters));
+}
+
+export function exportDataQualityExcel(report, filters = {}) {
+  exportXlsx(scopedExcelFilename(report, "data-quality"), buildDataQualityWorkbookSheets(report, filters));
+}
+
 export function buildReportWorkbookSheets(report) {
   const issues = report?.normalizedData?.issues || [];
   const people = report?.calculatedMetrics?.people || [];
@@ -45,6 +57,31 @@ export function buildReportWorkbookSheets(report) {
     { name: "Issues", rows: buildIssueRows(issues) },
     { name: "Data Quality", rows: buildQualityRows(quality) },
     { name: "Reconciliation", rows: buildReconciliationRows(report?.reconciliation || {}) }
+  ];
+}
+
+export function buildManagementWorkbookSheets(report, filters = {}) {
+  return [
+    { name: "Filters", rows: buildFilterRows(report, filters) },
+    { name: "Management KPI", rows: buildMetricRows(report?.calculatedMetrics?.management || {}) },
+    { name: "Issues", rows: buildIssueRows(report?.normalizedData?.issues || []) },
+    { name: "Reconciliation", rows: buildReconciliationRows(report?.reconciliation || {}) }
+  ];
+}
+
+export function buildScrumWorkbookSheets(report, filters = {}) {
+  return [
+    { name: "Filters", rows: buildFilterRows(report, filters) },
+    { name: "People KPI", rows: buildPeopleRows(report?.calculatedMetrics?.people || []) },
+    { name: "Issues", rows: buildIssueRows(report?.normalizedData?.issues || []) }
+  ];
+}
+
+export function buildDataQualityWorkbookSheets(report, filters = {}) {
+  return [
+    { name: "Filters", rows: buildFilterRows(report, filters) },
+    { name: "Data Quality", rows: buildQualityRows(report?.dataQuality || []) },
+    { name: "Matching Issues", rows: buildIssueRows(report?.normalizedData?.issues || []) }
   ];
 }
 
@@ -67,6 +104,27 @@ function buildSummaryRows(report, issues, people, quality) {
     ["هشدارهای کیفیت داده", counts.warning],
     ["اطلاعات کیفیت داده", counts.info],
     ["وضعیت ممیزی", report?.reconciliation?.reconciliationStatus || ""]
+  ];
+}
+
+function buildFilterRows(report, filters) {
+  return [
+    ["فیلد", "مقدار"],
+    ["تیم گزارش", report?.teamName || ""],
+    ["اسپرینت گزارش", report?.sprintName || ""],
+    ["شناسه گزارش", report?.id || ""],
+    ["تاریخ ایجاد گزارش", report?.createdAt || ""],
+    ["نسخه محاسبات", report?.calculationVersion || ""],
+    ["فیلتر تیم", filters.team || ""],
+    ["فیلتر اسپرینت", filters.sprint || ""],
+    ["از تاریخ", filters.dateFrom || ""],
+    ["تا تاریخ", filters.dateTo || ""],
+    ["شخص", filters.person || ""],
+    ["نقش", filters.role || ""],
+    ["وضعیت", filters.status || ""],
+    ["نوع برنامه", filters.planType || ""],
+    ["تعداد Issue در خروجی", report?.normalizedData?.issues?.length || 0],
+    ["تعداد موارد کیفیت داده در خروجی", report?.dataQuality?.length || 0]
   ];
 }
 
@@ -124,6 +182,12 @@ function reportExcelFilename(report) {
   const team = slugPart(report?.teamName || "team");
   const sprint = slugPart(report?.sprintName || "sprint");
   return `jira-kpi-${team}-${sprint}.xlsx`;
+}
+
+function scopedExcelFilename(report, scope) {
+  const team = slugPart(report?.teamName || "team");
+  const sprint = slugPart(report?.sprintName || "sprint");
+  return `jira-kpi-${scope}-${team}-${sprint}.xlsx`;
 }
 
 function slugPart(value) {

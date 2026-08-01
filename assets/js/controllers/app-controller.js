@@ -26,7 +26,7 @@ export class AppController {
   async init() {
     this.wireNavigation();
     wireMappingActions(this.state);
-    wireHistory({ onOpen: (report) => this.openReport(report), onRefresh: () => this.refreshReports() });
+    wireHistory({ onOpen: (report) => this.openReport(report, { navigateToManagement: true }), onRefresh: () => this.refreshReports() });
     this.wireUpload();
     this.wireBackup();
     await this.refreshReports();
@@ -43,10 +43,17 @@ export class AppController {
 
   wireNavigation() {
     document.querySelectorAll(".nav-item").forEach((button) => button.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item, .page-section").forEach((node) => node.classList.remove("active"));
-      button.classList.add("active");
-      document.getElementById(button.dataset.section).classList.add("active");
+      this.navigateTo(button.dataset.section);
     }));
+  }
+
+  navigateTo(sectionId) {
+    const button = document.querySelector(`.nav-item[data-section="${sectionId}"]`);
+    const section = document.getElementById(sectionId);
+    if (!button || !section) return;
+    document.querySelectorAll(".nav-item, .page-section").forEach((node) => node.classList.remove("active"));
+    button.classList.add("active");
+    section.classList.add("active");
   }
 
   wireUpload() {
@@ -145,7 +152,7 @@ export class AppController {
     await dbPut("metricResults", { id: report.id, calculatedMetrics: report.calculatedMetrics, calculationVersion: report.calculationVersion });
     await dbPut("kpiConfigurations", { id: report.id, kpiConfig: report.kpiConfig });
     await dbPut("dataQualityIssues", { id: report.id, items: quality });
-    this.openReport(report);
+    this.openReport(report, { navigateToManagement: true });
     await this.refreshReports();
     notify("گزارش تولید و ذخیره شد.");
   }
@@ -155,11 +162,12 @@ export class AppController {
     if (!this.state.activeReport && this.state.reports[0]) this.openReport(await getReport(this.state.reports[0].id));
   }
 
-  async openReport(report) {
+  async openReport(report, options = {}) {
     if (!report) return;
     this.state.activeReport = report;
     const reports = await loadReports();
     renderReport(report, reports, (nextReport) => this.openReport(nextReport));
+    if (options.navigateToManagement) this.navigateTo("management");
   }
 
   wireBackup() {

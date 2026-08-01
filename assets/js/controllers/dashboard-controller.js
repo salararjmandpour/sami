@@ -7,9 +7,10 @@ import { renderReconciliation } from "../views/reconciliation-view.js";
 import { applyIssueFilters, readActiveFilters } from "./filter-controller.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../services/calculations/report-calculator.js";
 import { buildReconciliation } from "../services/reconciliation-service.js";
-import { exportCsv, exportJson, exportReportExcel } from "../services/export-service.js";
+import { exportCsv, exportDataQualityExcel, exportJson, exportManagementExcel, exportReportExcel, exportScrumExcel } from "../services/export-service.js";
 import { dbPut } from "../services/indexeddb-service.js";
 import { getReport, saveReport } from "../services/report-storage-service.js";
+import { comparable } from "../services/normalization/string-normalizer.js";
 import { CALCULATION_VERSION } from "../utils/constants.js";
 
 export function renderReport(report, reports, onOpenReport = () => {}) {
@@ -18,8 +19,6 @@ export function renderReport(report, reports, onOpenReport = () => {}) {
   renderFilters(reports, report);
   renderQualitySummary(report);
   renderSourceActions(report);
-  renderScrumDashboards(report.calculatedMetrics.people);
-  renderQuality(report.dataQuality);
   renderFilteredViews(report);
   document.getElementById("recalculateReportBtn")?.addEventListener("click", async () => {
     if (!confirm(`گزارش با نسخه ${CALCULATION_VERSION} دوباره محاسبه شود؟ گزارش قبلی تغییر نمی‌کند.`)) return;
@@ -69,8 +68,9 @@ function renderFilteredViews(report) {
   const filtered = applyIssueFilters(report, filters);
   const calculatedMetrics = {
     management: calculateManagementMetrics(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping),
-    people: calculatePersonDashboards(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping)
+    people: filterPeopleByFilters(calculatePersonDashboards(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping), filters)
   };
+  const filteredQuality = filterDataQualityItems(report, filtered, filters);
   const filteredReconciliation = buildReconciliation({
     report: { teamName: report.teamName, sprintName: report.sprintName, calculatedMetrics, workCategoryMapping: report.workCategoryMapping },
     issues: filtered,
@@ -78,15 +78,58 @@ function renderFilteredViews(report) {
     personMappings: report.mappingSnapshot.personMappings,
     fieldMappings: report.mappingSnapshot.fieldMappings,
     fileMetadata: report.files,
-    dataQualityIssues: report.dataQuality
+    dataQualityIssues: filteredQuality
   });
-  const filteredReport = { ...report, calculatedMetrics, normalizedData: { ...report.normalizedData, issues: filtered }, reconciliation: filteredReconciliation };
+  const filteredReport = { ...report, calculatedMetrics, normalizedData: { ...report.normalizedData, issues: filtered }, dataQuality: filteredQuality, reconciliation: filteredReconciliation };
   attachIssueWorkLogBreakdown(filtered, calculatedMetrics.management.workLogBreakdown);
   renderKpiCards(calculatedMetrics.management, filteredReconciliation.drillDown || {}, filteredReport, filters);
+  renderScrumDashboards(calculatedMetrics.people);
+  renderQuality(filteredQuality);
   renderCharts(filteredReport);
   renderIssueTable(filtered);
   renderReconciliation(filteredReconciliation);
   document.getElementById("exportIssueCsvBtn")?.addEventListener("click", () => exportCsv("issues.csv", getIssueCsvRows(filtered)));
+  wireSectionExports(filteredReport, filters);
+}
+
+function wireSectionExports(filteredReport, filters) {
+  const management = document.getElementById("exportManagementExcelBtn");
+  const scrum = document.getElementById("exportScrumExcelBtn");
+  const quality = document.getElementById("exportDataQualityExcelBtn");
+  if (management) {
+    management.disabled = false;
+    management.onclick = () => exportManagementExcel(filteredReport, filters);
+  }
+  if (scrum) {
+    scrum.disabled = false;
+    scrum.onclick = () => exportScrumExcel(filteredReport, filters);
+  }
+  if (quality) {
+    quality.disabled = false;
+    quality.onclick = () => exportDataQualityExcel(filteredReport, filters);
+  }
+}
+
+function filterPeopleByFilters(people, filters) {
+  return people.filter((person) => {
+    if (filters.role && person.role !== filters.role) return false;
+    if (filters.person && comparable(person.name) !== comparable(filters.person)) return false;
+    return true;
+  });
+}
+
+function filterDataQualityItems(report, filteredIssues, filters) {
+  if (!reportMatchesTextFilters(report, filters)) return [];
+  const issueScopedFiltersActive = Boolean(filters.dateFrom || filters.dateTo || filters.person || filters.role || filters.status || filters.planType);
+  if (!issueScopedFiltersActive) return report.dataQuality || [];
+  const issueKeys = new Set(filteredIssues.map((issue) => comparable(issue.issueKey)));
+  return (report.dataQuality || []).filter((item) => !item.issueKey || issueKeys.has(comparable(item.issueKey)));
+}
+
+function reportMatchesTextFilters(report, filters) {
+  if (filters.team && !comparable(report?.teamName || "").includes(comparable(filters.team))) return false;
+  if (filters.sprint && !comparable(report?.sprintName || "").includes(comparable(filters.sprint))) return false;
+  return true;
 }
 
 function attachIssueWorkLogBreakdown(issues, breakdown) {

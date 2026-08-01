@@ -36,7 +36,7 @@
         <button class="nav-item" data-section="scrum">اسکرام</button>
         <button class="nav-item" data-section="quality">کیفیت داده</button>
         <button class="nav-item" data-section="reconciliation">ممیزی و تطبیق داده‌ها</button>
-        <button class="nav-item" data-section="history">تاریخچه</button>
+        <button class="nav-item" data-section="history">تاریخچه گزارش‌ها</button>
         <button class="nav-item" data-section="settings">تنظیمات</button>
       </nav>
 
@@ -55,7 +55,7 @@
               <li>فایل ظرفیت اعضای تیم را انتخاب کنید.</li>
               <li>فایل تعریف KPI را انتخاب کنید.</li>
               <li>نگاشت ستون‌ها و اعضای تیم را بررسی کنید.</li>
-              <li>گزارش را تولید کنید.</li>
+              <li>گزارش را تولید و ذخیره کنید.</li>
             </ol>
             <p class="privacy-note">تمام فایل‌ها داخل مرورگر شما پردازش می‌شوند و به هیچ سروری ارسال نمی‌شوند.</p>
           </div>
@@ -84,7 +84,7 @@
           </form>
           <div class="action-row">
             <button id="parseBtn" class="button" type="button">خواندن و پیش‌نمایش</button>
-            <button id="generateBtn" class="button button-primary" type="button" disabled aria-describedby="generateDisabledReason">تولید گزارش</button>
+            <button id="generateBtn" class="button button-primary" type="button" disabled aria-describedby="generateDisabledReason">تولید و ذخیره گزارش</button>
           </div>
           <p id="generateDisabledReason" class="status-note" aria-live="polite">برای تولید گزارش، هر سه فایل را انتخاب و سپس نگاشت‌ها را بررسی کنید.</p>
           <div id="filePreview" class="preview-panel empty-state">هنوز فایلی خوانده نشده است.</div>
@@ -112,6 +112,9 @@
 
         <section id="management" class="page-section">
           <div class="section-heading"><h2>داشبورد مدیریت</h2><p id="managementSubtitle">گزارشی انتخاب نشده است.</p></div>
+          <div class="action-row">
+            <button id="exportManagementExcelBtn" class="button button-secondary" type="button" disabled>خروجی Excel مدیریت</button>
+          </div>
           <div id="filters" class="filters"></div>
           <div id="qualitySummaryPanel"></div>
           <div id="sourceActionsPanel"></div>
@@ -131,11 +134,17 @@
 
         <section id="scrum" class="page-section">
           <div class="section-heading"><h2>داشبورد اسکرام</h2><p>نمای توسعه‌دهنده‌ها و QA بر اساس نگاشت افراد.</p></div>
+          <div class="action-row">
+            <button id="exportScrumExcelBtn" class="button button-secondary" type="button" disabled>خروجی Excel اسکرام</button>
+          </div>
           <div id="scrumDashboards"></div>
         </section>
 
         <section id="quality" class="page-section">
           <div class="section-heading"><h2>گزارش کیفیت داده</h2><p>خطاها، هشدارها و موارد قابل بررسی.</p></div>
+          <div class="action-row">
+            <button id="exportDataQualityExcelBtn" class="button button-secondary" type="button" disabled>خروجی Excel کیفیت داده</button>
+          </div>
           <div id="qualityReport" class="quality-list empty-state">گزارشی وجود ندارد.</div>
         </section>
 
@@ -148,7 +157,7 @@
         </section>
 
         <section id="history" class="page-section">
-          <div class="section-heading"><h2>تاریخچه گزارش‌ها</h2><p>گزارش‌ها در IndexedDB مرورگر ذخیره می‌شوند.</p></div>
+          <div class="section-heading"><h2>تاریخچه گزارش‌ها</h2><p>گزارش‌های ذخیره‌شده را باز کنید یا بدون باز کردن، خروجی Excel بگیرید.</p></div>
           <div id="historyList"></div>
         </section>
 
