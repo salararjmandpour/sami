@@ -1,11 +1,11 @@
 .kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; }
-.kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-height: 104px; box-shadow: var(--shadow); }
-.kpi-card h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
-.kpi-value { font-size: 26px; font-weight: 800; color: var(--primary-dark); overflow-wrap: anywhere; }
+.kpi-card { background: rgba(255, 255, 255, .98); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-height: 112px; box-shadow: var(--shadow-sm); }
+.kpi-card h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 700; }
+.kpi-value { font-size: 27px; font-weight: 800; color: var(--primary-dark); overflow-wrap: anywhere; }
 .kpi-reason { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .person-dashboard { margin-bottom: 20px; }
 .person-dashboard h3 { margin: 0 0 12px; }
-.chart-grid canvas { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-height: 260px; box-shadow: var(--shadow); }
+.chart-grid canvas { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-height: 260px; box-shadow: var(--shadow-sm); }
 .quality-item { display: grid; grid-template-columns: 90px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .quality-item:last-child { border-bottom: 0; }
 .severity-error { color: var(--danger); font-weight: 700; }

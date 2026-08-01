@@ -5,9 +5,10 @@
 @media (max-width: 760px) {
   .app-header { position: static; display: grid; padding: 16px; }
   .app-shell { grid-template-columns: 1fr; }
-  .side-nav { display: flex; gap: 6px; overflow-x: auto; border-left: 0; border-bottom: 1px solid var(--border); }
+  .side-nav { position: static; height: auto; display: flex; gap: 6px; overflow-x: auto; border-left: 0; border-bottom: 1px solid var(--border); }
   .nav-item { width: auto; white-space: nowrap; }
   .content { padding: 16px; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .section-heading { display: grid; }
+  .app-footer { display: grid; justify-items: start; }
 }
