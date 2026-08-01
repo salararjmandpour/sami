@@ -1,0 +1,11 @@
+{
+  "name": "jira-kpi-dashboard-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve:postgres": "node server/server.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

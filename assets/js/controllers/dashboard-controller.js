@@ -7,8 +7,9 @@ import { renderReconciliation } from "../views/reconciliation-view.js";
 import { applyIssueFilters, readActiveFilters } from "./filter-controller.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../services/calculations/report-calculator.js";
 import { buildReconciliation } from "../services/reconciliation-service.js";
-import { exportCsv, exportJson } from "../services/export-service.js";
+import { exportCsv, exportJson, exportReportExcel } from "../services/export-service.js";
 import { dbPut } from "../services/indexeddb-service.js";
+import { getReport, saveReport } from "../services/report-storage-service.js";
 import { CALCULATION_VERSION } from "../utils/constants.js";
 
 export function renderReport(report, reports, onOpenReport = () => {}) {
@@ -23,18 +24,19 @@ export function renderReport(report, reports, onOpenReport = () => {}) {
   document.getElementById("recalculateReportBtn")?.addEventListener("click", async () => {
     if (!confirm(`گزارش با نسخه ${CALCULATION_VERSION} دوباره محاسبه شود؟ گزارش قبلی تغییر نمی‌کند.`)) return;
     const recalculated = recalculateReportCopy(report);
-    await dbPut("reports", recalculated);
+    await saveReport(recalculated);
     await dbPut("metricResults", { id: recalculated.id, calculatedMetrics: recalculated.calculatedMetrics, calculationVersion: recalculated.calculationVersion });
     onOpenReport(recalculated);
   });
   document.getElementById("reportFilter")?.addEventListener("change", (event) => {
-    onOpenReport(reports.find((candidate) => candidate.id === event.target.value));
+    getReport(event.target.value).then(onOpenReport);
   });
   ["teamFilter", "sprintFilter", "filterDateFrom", "filterDateTo", "personFilter", "roleFilter", "statusFilter", "planFilter"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", () => renderFilteredViews(report));
     document.getElementById(id)?.addEventListener("change", () => renderFilteredViews(report));
   });
   document.getElementById("exportReconciliationBtn")?.addEventListener("click", () => exportJson("jira-kpi-reconciliation.json", report.reconciliation || {}));
+  document.getElementById("exportReportExcelBtn")?.addEventListener("click", () => exportReportExcel(report));
 }
 
 function recalculateReportCopy(report) {

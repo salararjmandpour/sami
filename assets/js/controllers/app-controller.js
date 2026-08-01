@@ -10,6 +10,7 @@ import { buildQualityReport } from "../services/data-quality-service.js";
 import { buildReconciliation } from "../services/reconciliation-service.js";
 import { dbClearAll, dbGet, dbGetAll, dbPut, STORES } from "../services/indexeddb-service.js";
 import { exportJson } from "../services/export-service.js";
+import { getReport, saveReport } from "../services/report-storage-service.js";
 import { defaultWorkCategoryMapping, mergeWorkCategoryMapping } from "../services/work-log-category-service.js";
 import { getHolidays, saveHoliday } from "../services/holiday-service.js";
 import { workingHoursBetween } from "../services/holiday-service.js";
@@ -140,7 +141,7 @@ export class AppController {
       reconciliation,
       kpiConfig: normalizeKpiConfig(this.state.kpi.kpis)
     });
-    await dbPut("reports", report);
+    await saveReport(report);
     await dbPut("metricResults", { id: report.id, calculatedMetrics: report.calculatedMetrics, calculationVersion: report.calculationVersion });
     await dbPut("kpiConfigurations", { id: report.id, kpiConfig: report.kpiConfig });
     await dbPut("dataQualityIssues", { id: report.id, items: quality });
@@ -151,7 +152,7 @@ export class AppController {
 
   async refreshReports() {
     this.state.reports = await refreshHistory();
-    if (!this.state.activeReport && this.state.reports[0]) this.openReport(this.state.reports[0]);
+    if (!this.state.activeReport && this.state.reports[0]) this.openReport(await getReport(this.state.reports[0].id));
   }
 
   async openReport(report) {

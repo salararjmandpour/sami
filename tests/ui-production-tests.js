@@ -2,6 +2,8 @@ import { test, equal, ok } from "./test-helpers.js";
 import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js";
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
 import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
+import { buildReportWorkbookSheets } from "../assets/js/services/export-service.js";
+import { deleteReport, getReport, resetReportApiProbe, saveReport } from "../assets/js/services/report-storage-service.js";
 
 const issues = [
   { issueKey: "A-1", statusCanonical: "done", planType: "planned", assignee: "Sara", qaOwner: "Ali", created: "2026-01-02" },
@@ -132,3 +134,53 @@ test("Person dashboards expose new metric drill-down buttons", () => {
     globalThis.document = oldDocument;
   }
 });
+
+test("Excel export: report workbook contains Persian summary and issue sheets", () => {
+  const sheets = buildReportWorkbookSheets({
+    teamName: "تیم محصول",
+    sprintName: "26.1",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    calculationVersion: "1.1.0",
+    normalizedData: { issues: [{ issueKey: "A-1", summary: "جزئیات", labels: ["hotfix"], qaReturned: true }] },
+    calculatedMetrics: {
+      management: { deliveryRate: { displayValue: "90%", value: 90, unit: "%" } },
+      people: [{ name: "سارا", role: "developer", metrics: { plannedWork: { displayValue: "4h", value: 4, unit: "h" } } }]
+    },
+    dataQuality: [{ severity: "warning", code: "sample", message: "نیاز به بررسی" }],
+    reconciliation: { reconciliationStatus: "ok" }
+  });
+  equal(sheets[0].name, "Summary");
+  ok(sheets[0].rows.flat().includes("تیم محصول"));
+  ok(sheets.find((sheet) => sheet.name === "Issues").rows.flat().includes("جزئیات"));
+});
+
+test("Report storage: API availability avoids IndexedDB fallback", async () => {
+  const oldFetch = globalThis.fetch;
+  const oldIndexedDb = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, method: options.method || "GET" });
+    if (url === "/api/health") return jsonResponse({ ok: true, storage: "postgres" });
+    if (url === "/api/reports" && options.method === "POST") return jsonResponse({ report: { id: "r-1" } });
+    if (url === "/api/reports/r-1") return jsonResponse(options.method === "DELETE" ? { ok: true } : { report: { id: "r-1", teamName: "تیم" } });
+    throw new Error(`unexpected fetch ${url}`);
+  };
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, get: () => { throw new Error("IndexedDB fallback should not run"); } });
+  resetReportApiProbe();
+  try {
+    await saveReport({ id: "r-1", teamName: "تیم", createdAt: "2026-01-01T00:00:00.000Z" });
+    equal((await getReport("r-1")).teamName, "تیم");
+    await deleteReport("r-1");
+    equal(calls.filter((call) => call.url === "/api/health").length, 1);
+    equal(calls.some((call) => call.url.includes("indexeddb")), false);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldIndexedDb) Object.defineProperty(globalThis, "indexedDB", oldIndexedDb);
+    else delete globalThis.indexedDB;
+    resetReportApiProbe();
+  }
+});
+
+function jsonResponse(payload) {
+  return { ok: true, status: 200, statusText: "OK", json: async () => payload };
+}

@@ -8,7 +8,8 @@
 - ES Modules بدون build step
 - IndexedDB برای ذخیره محلی تاریخچه، نگاشت‌ها، تنظیمات و تعطیلات
 - Chart.js، SheetJS، Mammoth.js و idb به صورت فایل محلی در `assets/vendor`
-- بدون React، Vue، Angular، TypeScript، Node.js backend، npm، Webpack یا Vite
+- بدون React، Vue، Angular، TypeScript، Webpack یا Vite
+- اجرای پیش‌فرض همچنان build-free و فقط با `python -m http.server 8080` است؛ برای ذخیره‌سازی PostgreSQL یک سرور Node.js اختیاری وجود دارد.
 
 ## روش اجرا
 
@@ -26,9 +27,33 @@ http://localhost:8080
 
 باز کردن مستقیم `index.html` با `file://` توصیه نمی‌شود، چون مرورگرها معمولا ES Moduleها را در این حالت محدود می‌کنند. VS Code Live Server هم قابل استفاده است.
 
+### اجرای اختیاری با PostgreSQL
+
+برای ذخیره دائمی تاریخچه گزارش‌ها در PostgreSQL، وابستگی‌ها را نصب و سرور اختیاری را اجرا کنید:
+
+```bash
+npm install
+DATABASE_URL=postgres://user:password@localhost:5432/jira_kpi npm run serve:postgres
+```
+
+در PowerShell:
+
+```powershell
+$env:DATABASE_URL="postgres://user:password@localhost:5432/jira_kpi"
+npm run serve:postgres
+```
+
+این سرور همان فایل‌های استاتیک داشبورد را سرو می‌کند و APIهای `/api/reports` را برای ذخیره، فهرست، بازیابی و حذف گزارش‌ها فراهم می‌کند. اگر داشبورد را همچنان با `python -m http.server 8080` اجرا می‌کنید و API را روی پورت دیگری بالا آورده‌اید، مقدار پایه API را در مرورگر تنظیم کنید:
+
+```js
+localStorage.setItem("jiraKpiApiBase", "http://127.0.0.1:3000");
+```
+
+اگر API در دسترس نباشد، برنامه به صورت خودکار از IndexedDB مرورگر استفاده می‌کند.
+
 ## حریم خصوصی
 
-همه پردازش‌ها داخل مرورگر انجام می‌شود. فایل‌ها به هیچ API یا سروری ارسال نمی‌شوند. فقط متادیتا، هش SHA-256، داده نرمال‌شده، نتیجه محاسبات، نگاشت‌ها و تنظیمات لازم در IndexedDB مرورگر ذخیره می‌شود.
+در اجرای پیش‌فرض با `python -m http.server 8080` همه پردازش‌ها داخل مرورگر انجام می‌شود و داده‌ها در IndexedDB ذخیره می‌شوند. در اجرای اختیاری PostgreSQL، گزارش کامل محاسبه‌شده از طریق API محلی `/api/reports` در پایگاه داده ذخیره و بعدا بازیابی می‌شود.
 
 ## معماری
 
@@ -102,15 +127,18 @@ KPIهای Rework Rate، Average WIP و Average Story Size در نبود داده
 
 ## تاریخچه و پشتیبان
 
-گزارش‌ها در IndexedDB با storeهای زیر ذخیره می‌شوند:
+گزارش‌ها در حالت پیش‌فرض در IndexedDB با storeهای زیر ذخیره می‌شوند:
 
 `reports`, `jiraDatasets`, `capacityDatasets`, `kpiConfigurations`, `fieldMappings`, `personMappings`, `metricResults`, `holidays`, `dataQualityIssues`, `settings`
 
 از بخش تاریخچه می‌توانید گزارش را باز، حذف یا تنظیماتش را کپی کنید. دکمه «خروجی پشتیبان» کل داده محلی را JSON می‌کند و «بازیابی پشتیبان» همان JSON را برمی‌گرداند. «حذف همه داده‌ها» کل IndexedDB پروژه را پس از تایید پاک می‌کند.
 
+در حالت PostgreSQL، تاریخچه از جدول `jira_kpi_reports` خوانده می‌شود و باز کردن هر گزارش، نسخه کامل JSONB همان گزارش را از API بازیابی می‌کند. حذف گزارش در این حالت soft delete است: گزارش از تاریخچه عادی پنهان می‌شود، اما ردیف پایگاه داده با `deleted_at` برای ممیزی باقی می‌ماند.
+
 ## Export و Import
 
 - خروجی گزارش کامل به JSON از پشتیبان محلی
+- خروجی Excel گزارش فعال شامل خلاصه، KPIهای مدیریتی، KPIهای افراد، Issueها، کیفیت داده و ممیزی
 - خروجی جدول Issueها به CSV با محافظت در برابر formula injection
 - خروجی و ورود نگاشت افراد JSON
 - خروجی و ورود تعطیلات JSON
