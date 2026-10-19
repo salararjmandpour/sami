@@ -2,6 +2,7 @@ import { test, equal, ok } from "./test-helpers.js";
 import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js";
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
 import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
+import { renderCharts, resizeCharts } from "../assets/js/views/chart-view.js";
 import { calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
 import { renderHistory } from "../assets/js/views/history-view.js";
 import { selectionTokensFromFiles } from "../assets/js/utils/upload-selection.js";
@@ -266,6 +267,57 @@ test("Report storage: a failed Postgres save is identified as browser-only", asy
   } finally {
     globalThis.fetch = oldFetch;
     resetReportApiProbe();
+  }
+});
+
+test("Older person snapshots do not stop the management charts", () => {
+  const cleanup = mountFixture(`<section id="management" class="page-section active"><div class="chart-grid">
+    <div class="chart-panel"><canvas id="capacityChart"></canvas></div>
+    <div class="chart-panel"><canvas id="workMixChart"></canvas></div>
+    <div class="chart-panel"><canvas id="deliveryChart"></canvas></div>
+    <div class="chart-panel"><canvas id="qaChart"></canvas></div>
+    <div class="chart-slot"><div class="chart-panel"><canvas id="blockedChart"></canvas></div><p id="blockedChartNote"></p></div>
+  </div></section>`);
+  try {
+    renderCharts({ calculatedMetrics: { people: [{ name: "Legacy" }], management: {} }, normalizedData: { issues: [] } });
+    ["capacityChart", "workMixChart", "deliveryChart", "qaChart", "blockedChart"].forEach((id) => {
+      ok(window.Chart.getChart(document.getElementById(id)));
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test("Management charts stay bounded after the hidden section is shown", async () => {
+  const cleanup = mountFixture(`<section id="management" class="page-section"><div class="chart-grid">
+    <div class="chart-panel"><canvas id="capacityChart"></canvas></div>
+    <div class="chart-panel"><canvas id="workMixChart"></canvas></div>
+    <div class="chart-panel"><canvas id="deliveryChart"></canvas></div>
+    <div class="chart-panel"><canvas id="qaChart"></canvas></div>
+    <div class="chart-slot"><div class="chart-panel"><canvas id="blockedChart"></canvas></div><p id="blockedChartNote"></p></div>
+  </div></section>`);
+  try {
+    renderCharts({
+      calculatedMetrics: {
+        people: [{ name: "Ahad Sheibani", metrics: { capacityUtilization: { value: 25.07 }, deliveryRate: { value: 50 } } }],
+        management: { workMix: { planned: 414, unplanned: 138, carry_over: 1135 }, qaReturnRate: { value: 42.72 }, firstPassRate: { value: 57.28 } }
+      },
+      normalizedData: { issues: [{ issueKey: "PCMP-1", blockedHours: 12 }] }
+    });
+    document.getElementById("management").classList.add("active");
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    resizeCharts();
+    const canvas = document.getElementById("capacityChart");
+    const rect = canvas.getBoundingClientRect();
+    ok(rect.width > 200);
+    ok(rect.height > 150 && rect.height < 360);
+    ok(canvas.width > 0 && canvas.height > 0 && canvas.height < 2000);
+    ["workMixChart", "deliveryChart", "qaChart", "blockedChart"].forEach((id) => {
+      const box = document.getElementById(id).getBoundingClientRect();
+      ok(box.height > 150 && box.height < 360);
+    });
+  } finally {
+    cleanup();
   }
 });
 

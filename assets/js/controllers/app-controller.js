@@ -2,6 +2,7 @@ import { clearParsedUploads, parseSelectedFiles, readSelectionTokens, sameSelect
 import { renderMappings, wireMappingActions } from "./mapping-controller.js";
 import { refreshHistory, wireHistory, loadReports } from "./history-controller.js";
 import { renderReport } from "./dashboard-controller.js";
+import { resizeCharts } from "../views/chart-view.js";
 import { normalizeJiraRows, extractQaKeys } from "../models/jira-model.js";
 import { normalizeKpiConfig } from "../models/kpi-model.js";
 import { createReport } from "../models/report-model.js";
@@ -60,6 +61,7 @@ export class AppController {
     document.querySelectorAll(".nav-item, .page-section").forEach((node) => node.classList.remove("active"));
     button.classList.add("active");
     section.classList.add("active");
+    if (sectionId === "management") requestAnimationFrame(() => resizeCharts());
   }
 
   wireUpload() {
@@ -211,10 +213,11 @@ export class AppController {
 
   async openReport(report, options = {}) {
     if (!report) return;
+    if (options.navigateToManagement) this.navigateTo("management");
     this.state.activeReport = report;
     const reports = await loadReports();
     renderReport(report, reports, (nextReport) => this.openReport(nextReport));
-    if (options.navigateToManagement) this.navigateTo("management");
+    if (options.navigateToManagement) requestAnimationFrame(() => resizeCharts());
   }
 
   applyDuplicatedConfig(source) {

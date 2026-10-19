@@ -1,11 +1,63 @@
 const charts = new Map();
 
 function replaceChart(id, config) {
-  if (!window.Chart) return;
-  if (charts.has(id)) charts.get(id).destroy();
   const canvas = document.getElementById(id);
   if (!canvas) return;
-  charts.set(id, new Chart(canvas, config));
+  const host = canvas.parentElement;
+  clearChartError(host);
+  if (!window.Chart) {
+    showChartError(host, "کتابخانه نمودار بارگذاری نشده است.");
+    return;
+  }
+  if (charts.has(id)) {
+    charts.get(id).destroy();
+    charts.delete(id);
+  }
+  try {
+    const chart = new window.Chart(canvas, config);
+    charts.set(id, chart);
+    watchChartHost(canvas);
+    if (canvas.clientWidth === 0 || canvas.clientHeight === 0) requestAnimationFrame(() => chart.resize());
+  } catch (error) {
+    console.error(`Chart ${id} failed`, error);
+    showChartError(host, "این نمودار نمایش داده نشد. داده یا اندازه قاب نمودار را بررسی کنید.");
+  }
+}
+
+export function resizeCharts() {
+  charts.forEach((chart) => {
+    try { chart.resize(); } catch (error) { console.error("Chart resize failed", error); }
+  });
+}
+
+function watchChartHost(canvas) {
+  const host = canvas.parentElement;
+  if (!host || host.dataset.chartObserved === "true" || typeof ResizeObserver === "undefined") return;
+  host.dataset.chartObserved = "true";
+  let lastSize = "";
+  const observer = new ResizeObserver(() => {
+    const chart = charts.get(canvas.id);
+    const nextSize = `${host.clientWidth}x${host.clientHeight}`;
+    if (!chart || host.clientWidth === 0 || host.clientHeight === 0 || nextSize === lastSize) return;
+    lastSize = nextSize;
+    chart.resize();
+  });
+  observer.observe(host);
+}
+
+function showChartError(host, message) {
+  if (!host) return;
+  let note = host.querySelector(".chart-error");
+  if (!note) {
+    note = document.createElement("p");
+    note.className = "chart-error";
+    host.append(note);
+  }
+  note.textContent = message;
+}
+
+function clearChartError(host) {
+  host?.querySelector(".chart-error")?.remove();
 }
 
 export function renderCharts(report) {
@@ -13,9 +65,9 @@ export function renderCharts(report) {
   const management = report?.calculatedMetrics?.management || {};
   const issues = report?.normalizedData?.issues || [];
   const blockedRows = issues.filter((issue) => Number.isFinite(issue.blockedHours) && issue.blockedHours > 0).sort((a, b) => b.blockedHours - a.blockedHours).slice(0, 12);
-  replaceChart("capacityChart", bar("بهره‌برداری ظرفیت", people.map((p) => p.name), people.map((p) => valueOrNull(p.metrics.capacityUtilization.value)), "%"));
+  replaceChart("capacityChart", bar("بهره‌برداری ظرفیت", people.map((p) => p.name), people.map((p) => valueOrNull(p.metrics?.capacityUtilization?.value)), "%"));
   replaceChart("workMixChart", doughnut("ترکیب کار", ["Planned", "Unplanned", "Carry Over"], [management.workMix?.planned ?? null, management.workMix?.unplanned ?? null, management.workMix?.carry_over ?? null], "h"));
-  replaceChart("deliveryChart", bar("نرخ تحویل افراد", people.map((p) => p.name), people.map((p) => valueOrNull(p.metrics.deliveryRate.value)), "%"));
+  replaceChart("deliveryChart", bar("نرخ تحویل افراد", people.map((p) => p.name), people.map((p) => valueOrNull(p.metrics?.deliveryRate?.value)), "%"));
   replaceChart("qaChart", doughnut("QA Return / First Pass", ["Returned", "First Pass"], [valueOrNull(management.qaReturnRate?.value), valueOrNull(management.firstPassRate?.value)], "%"));
   replaceChart("blockedChart", bar("زمان بلاک", blockedRows.map((issue) => issue.issueKey), blockedRows.map((issue) => issue.blockedHours), "h"));
   renderBlockedOutlierNote(blockedRows);
