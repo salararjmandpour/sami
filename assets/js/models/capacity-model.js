@@ -3,21 +3,31 @@ import { comparable } from "../services/normalization/string-normalizer.js";
 
 export function buildInitialPersonMappings(capacityPeople, jiraRows, saved = []) {
   const map = new Map();
-  [...DEFAULT_PERSON_MAPPING, ...saved].forEach((item) => map.set(comparable(item.capacityName || item.jiraName), { ...item, enabled: item.enabled !== false }));
+  const presets = new Map();
+  DEFAULT_PERSON_MAPPING.forEach((item) => {
+    const key = comparable(item.capacityName || item.jiraName);
+    if (key) presets.set(key, item);
+  });
+  saved.forEach((item) => {
+    const key = comparable(item.capacityName || item.jiraName);
+    if (key) presets.set(key, item);
+  });
   capacityPeople.forEach((person) => {
     const key = comparable(person.capacityName);
-    if (!map.has(key)) {
-      map.set(key, {
-        capacityId: person.id,
-        capacityName: person.capacityName,
-        jiraName: "",
-        role: "developer",
-        workLogColumn: "",
-        enabled: true
-      });
-    } else {
-      map.set(key, { ...map.get(key), capacityId: person.id, capacityName: person.capacityName });
-    }
+    const preset = presets.get(key);
+    map.set(key, preset ? {
+      ...preset,
+      capacityId: person.id,
+      capacityName: person.capacityName,
+      enabled: preset.enabled !== false
+    } : {
+      capacityId: person.id,
+      capacityName: person.capacityName,
+      jiraName: "",
+      role: "developer",
+      workLogColumn: "",
+      enabled: true
+    });
   });
   const jiraNames = new Set();
   jiraRows.forEach((row) => {

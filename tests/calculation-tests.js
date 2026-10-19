@@ -19,7 +19,7 @@ test("QA Return Rate", () => equal(calculateManagementMetrics(issues, capacity, 
 test("First Pass Rate", () => equal(calculateManagementMetrics(issues, capacity, mappings).firstPassRate.value, 50));
 test("Hotfix Count", () => equal(calculateManagementMetrics(issues, capacity, mappings).hotfixCount.value, 1));
 test("Bug Fix Count", () => equal(calculateManagementMetrics(issues, capacity, mappings).bugfixCount.value, 1));
-test("Estimation Accuracy", () => close(calculateManagementMetrics(issues, capacity, mappings).estimationAccuracy.value, 112.5));
+test("Estimation Accuracy counts a shared work-log column once", () => equal(calculateManagementMetrics(issues, capacity, mappings).estimationAccuracy.value, 225));
 test("Division by zero", () => equal(calculateManagementMetrics([], [], []).capacityUtilization.value, null));
 test("Missing Story Points", () => equal(calculateManagementMetrics(issues, capacity, mappings).averageStorySize.value, null));
 test("Missing Rework Time", () => equal(calculateManagementMetrics(issues, capacity, mappings).reworkRate.value, null));
@@ -48,3 +48,9 @@ test("Non-productive time is excluded from planned productive work", () => equal
 test("Team-level distinct issue counts do not double-count duplicates", () => equal(calculateManagementMetrics(enhancedIssues, enhancedCapacity, enhancedMappings).totalPlannedIssueCount.value, 2));
 test("Planned Start Rate returns N/A when Planned Issue Count is zero", () => equal(calculateManagementMetrics(enhancedIssues.filter((i) => i.planType !== "planned"), enhancedCapacity, enhancedMappings).plannedStartRate.value, null));
 test("QA ownership uses Content Point/QA owner", () => equal(calculatePersonDashboards([{ ...enhancedIssues[0], assignee: "Dev A", qaOwner: "QA B", testEstimate: 3 }], [{ id: "q", capacityName: "QA", availableCapacity: 10, plannedCapacity: 8, unplannedCapacity: 2 }], [{ capacityId: "q", capacityName: "QA", jiraName: "QA B", role: "qa", workLogColumn: "Dev Work", enabled: true }])[0].metrics.plannedIssueCount.value, 1));
+test("Duplicate issue rows do not repeat estimate hours", () => {
+  const metrics = calculateManagementMetrics(enhancedIssues, enhancedCapacity, enhancedMappings);
+  equal(metrics.plannedWork.value, 6);
+  equal(metrics.rawWorkLogged.value, 21);
+});
+test("Shared work-log column is counted once", () => equal(calculateManagementMetrics(issues, capacity, mappings).rawWorkLogged.value, 12));

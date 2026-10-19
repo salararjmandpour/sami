@@ -1,4 +1,4 @@
-import { parseSelectedFiles } from "./upload-controller.js";
+import { clearParsedUploads, parseSelectedFiles, readSelectionTokens, sameSelection } from "./upload-controller.js";
 import { renderMappings, wireMappingActions } from "./mapping-controller.js";
 import { refreshHistory, wireHistory, loadReports } from "./history-controller.js";
 import { renderReport } from "./dashboard-controller.js";
@@ -6,16 +6,18 @@ import { normalizeJiraRows, extractQaKeys } from "../models/jira-model.js";
 import { normalizeKpiConfig } from "../models/kpi-model.js";
 import { createReport } from "../models/report-model.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../services/calculations/report-calculator.js";
-import { buildQualityReport } from "../services/data-quality-service.js";
+import { buildQualityReport, issue as qualityIssue } from "../services/data-quality-service.js";
 import { buildReconciliation } from "../services/reconciliation-service.js";
 import { dbClearAll, dbGet, dbGetAll, dbPut, STORES } from "../services/indexeddb-service.js";
 import { exportJson } from "../services/export-service.js";
-import { getReport, saveReport } from "../services/report-storage-service.js";
+import { deleteReport, getReport, hasReportApi, listReports, saveReport } from "../services/report-storage-service.js";
 import { defaultWorkCategoryMapping, mergeWorkCategoryMapping } from "../services/work-log-category-service.js";
 import { getHolidays, saveHoliday } from "../services/holiday-service.js";
 import { workingHoursBetween } from "../services/holiday-service.js";
+import { renderFieldMappings, renderPersonMappings } from "../views/mapping-view.js";
 import { renderHolidays, readHolidayRows, renderWorkCategoryMappings, readWorkCategoryMappings } from "../views/settings-view.js";
 import { notify } from "../views/notification-view.js";
+import { partitionIssuesByCreatedRange } from "./filter-controller.js";
 import { evaluateGenerateReadiness, renderGenerateState, renderPreview, setFileStatus } from "../views/upload-view.js";
 
 export class AppController {
@@ -26,7 +28,11 @@ export class AppController {
   async init() {
     this.wireNavigation();
     wireMappingActions(this.state);
-    wireHistory({ onOpen: (report) => this.openReport(report, { navigateToManagement: true }), onRefresh: () => this.refreshReports() });
+    wireHistory({
+      onOpen: (report) => this.openReport(report, { navigateToManagement: true }),
+      onRefresh: () => this.refreshReports(),
+      onDuplicate: (source) => this.applyDuplicatedConfig(source)
+    });
     this.wireUpload();
     this.wireBackup();
     await this.refreshReports();
@@ -58,50 +64,85 @@ export class AppController {
 
   wireUpload() {
     ["jiraFile", "capacityFile", "kpiFile"].forEach((id) => {
-      document.getElementById(id)?.addEventListener("change", (event) => {
-        setFileStatus(`${id}Meta`, "idle", event.target.files[0]?.name || "");
-        renderGenerateState(evaluateGenerateReadiness(this.state));
+      const input = document.getElementById(id);
+      input?.addEventListener("click", () => {
+        input.value = "";
+        this.invalidateUploads();
       });
+      input?.addEventListener("change", () => this.invalidateUploads());
     });
+    document.getElementById("mapping")?.addEventListener("input", () => this.renderUploadReadiness());
+    document.getElementById("mapping")?.addEventListener("change", () => this.renderUploadReadiness());
     document.getElementById("parseBtn").addEventListener("click", async () => {
+      if (this.state.parsing || this.state.generating) return;
+      this.state.parsing = true;
+      this.setUploadBusy(true);
       try {
         notify("در حال خواندن فایل‌ها...");
         await parseSelectedFiles(this.state);
         await this.prepareMappings();
         notify("فایل‌ها خوانده شدند.");
       } catch (error) {
-        ["jiraFileMeta", "capacityFileMeta", "kpiFileMeta"].forEach((id) => {
-          if (document.getElementById(id)?.dataset.status === "reading") setFileStatus(id, "error");
-        });
-        renderGenerateState(evaluateGenerateReadiness(this.state));
+        ["jiraFileMeta", "capacityFileMeta", "kpiFileMeta"].forEach((id) => setFileStatus(id, "error"));
+        renderPreview(this.state);
         notify(userSafeError(error, "خواندن فایل‌ها ناموفق بود. فایل‌ها را بررسی و دوباره تلاش کنید."), "error");
+      } finally {
+        this.state.parsing = false;
+        this.setUploadBusy(false);
       }
     });
     document.getElementById("generateBtn").addEventListener("click", async () => {
+      if (this.state.parsing || this.state.generating) return;
+      const readiness = evaluateGenerateReadiness(this.state);
+      renderGenerateState(readiness);
+      if (!readiness.ready) return;
+      this.state.generating = true;
+      this.setUploadBusy(true);
       try {
-        const readiness = evaluateGenerateReadiness(this.state);
-        renderGenerateState(readiness);
-        if (!readiness.ready) return;
+        notify("در حال تولید گزارش...");
         await this.generateReport();
       } catch (error) {
         notify(userSafeError(error, "تولید گزارش ناموفق بود. کیفیت داده و نگاشت‌ها را بررسی کنید."), "error");
+      } finally {
+        this.state.generating = false;
+        this.setUploadBusy(false);
       }
     });
+  }
+
+  invalidateUploads() {
+    clearParsedUploads(this.state);
+    ["jiraFile", "capacityFile", "kpiFile"].forEach((id) => {
+      const file = document.getElementById(id)?.files?.[0];
+      setFileStatus(`${id}Meta`, "idle", file?.name || "");
+    });
+    renderPreview(this.state);
+    this.renderUploadReadiness();
+  }
+
+  renderUploadReadiness() {
+    renderGenerateState(evaluateGenerateReadiness(this.state));
+  }
+
+  setUploadBusy(busy) {
+    const parseButton = document.getElementById("parseBtn");
+    const generateButton = document.getElementById("generateBtn");
+    if (parseButton) parseButton.disabled = busy;
+    if (busy && generateButton) generateButton.disabled = true;
+    if (!busy) this.renderUploadReadiness();
   }
 
   async prepareMappings() {
     const qaKeys = extractQaKeys(this.state.jira.qa.rows);
     this.state.normalizedIssues = normalizeJiraRows(this.state.jira.main.rows, this.state.jira.fieldMap, qaKeys, this.state.holidays, workingHoursBetween);
     await renderMappings(this.state);
-    document.getElementById("mapping")?.addEventListener("input", () => renderGenerateState(evaluateGenerateReadiness(this.state)));
-    document.getElementById("mapping")?.addEventListener("change", () => renderGenerateState(evaluateGenerateReadiness(this.state)));
-    renderGenerateState(evaluateGenerateReadiness(this.state));
+    this.applyPendingMappingSnapshot();
+    this.renderUploadReadiness();
   }
 
   async generateReport() {
-    if (!this.state.jira || !this.state.capacity || !this.state.kpi) {
-      await parseSelectedFiles(this.state);
-      await this.prepareMappings();
+    if (!sameSelection(this.state.parsedSelection, readSelectionTokens())) {
+      throw new Error("فایل‌های انتخاب‌شده با داده‌های خوانده‌شده یکسان نیستند. دوباره خواندن و پیش‌نمایش را اجرا کنید.");
     }
     this.state.fieldMap = Object.fromEntries([...document.querySelectorAll("[data-field-key]")].map((input) => [input.dataset.fieldKey, input.value]));
     this.state.personMappings = [...document.querySelectorAll("#personMappingTable tbody tr")].map((row) => ({
@@ -113,8 +154,14 @@ export class AppController {
       enabled: row.querySelector("[data-person-field='enabled']").checked
     }));
     const qaKeys = extractQaKeys(this.state.jira.qa.rows);
-    const issues = normalizeJiraRows(this.state.jira.main.rows, this.state.fieldMap, qaKeys, this.state.holidays, workingHoursBetween);
+    const normalizedIssues = normalizeJiraRows(this.state.jira.main.rows, this.state.fieldMap, qaKeys, this.state.holidays, workingHoursBetween);
+    const dateFrom = document.getElementById("dateFrom").value;
+    const dateTo = document.getElementById("dateTo").value;
+    const datePartition = partitionIssuesByCreatedRange(normalizedIssues, dateFrom, dateTo);
+    const issues = datePartition.included;
     const quality = buildQualityReport({ jira: this.state.jira, fieldMap: this.state.fieldMap, capacity: this.state.capacity, issues, personMappings: this.state.personMappings, workCategoryMapping: this.state.workCategoryMapping });
+    if (datePartition.missingCreated.length) quality.push(qualityIssue("warning", "Missing Created Date", `${datePartition.missingCreated.length} مسئله تاریخ ایجاد ندارد و چون بازه تاریخ انتخاب شده است در گزارش نیامده است.`));
+    if (datePartition.outsideRange.length) quality.push(qualityIssue("info", "Outside Report Date Range", `${datePartition.outsideRange.length} مسئله خارج از بازه تاریخ گزارش است و در محاسبات نیامده است.`));
     if (quality.some((item) => item.severity === "error")) {
       const { renderQuality } = await import("../views/quality-view.js");
       renderQuality(quality);
@@ -136,8 +183,8 @@ export class AppController {
       metadata: {
         teamName: document.getElementById("teamName").value,
         sprintName: document.getElementById("sprintName").value,
-        dateFrom: document.getElementById("dateFrom").value,
-        dateTo: document.getElementById("dateTo").value
+        dateFrom,
+        dateTo
       },
       files: this.state.fileMetadata,
       normalizedData: { issues, capacityPeople: this.state.capacity.people },
@@ -170,11 +217,54 @@ export class AppController {
     if (options.navigateToManagement) this.navigateTo("management");
   }
 
+  applyDuplicatedConfig(source) {
+    const team = document.getElementById("teamName");
+    const sprint = document.getElementById("sprintName");
+    const dateFrom = document.getElementById("dateFrom");
+    const dateTo = document.getElementById("dateTo");
+    if (team) team.value = source.teamName || "";
+    if (sprint) sprint.value = source.sprintName || "";
+    if (dateFrom) dateFrom.value = source.dateFrom || "";
+    if (dateTo) dateTo.value = source.dateTo || "";
+    this.state.pendingMappingSnapshot = source.mappingSnapshot || null;
+    if (this.state.jira) this.applyPendingMappingSnapshot();
+  }
+
+  applyPendingMappingSnapshot() {
+    const snapshot = this.state.pendingMappingSnapshot;
+    if (!snapshot) return;
+    if (snapshot.fieldMappings) {
+      this.state.fieldMap = { ...(this.state.fieldMap || {}), ...snapshot.fieldMappings };
+      renderFieldMappings(this.state.jira?.main.headers || [], this.state.fieldMap);
+    }
+    if (snapshot.personMappings) {
+      this.state.personMappings = snapshot.personMappings;
+      renderPersonMappings(this.state.personMappings, this.state.jira?.main.headers || []);
+    }
+    this.state.pendingMappingSnapshot = null;
+    this.renderUploadReadiness();
+  }
+
   wireBackup() {
     document.getElementById("exportBackupBtn").addEventListener("click", async () => {
-      const backup = {};
-      await Promise.all(STORES.map(async (store) => { backup[store] = await dbGetAll(store); }));
-      exportJson("jira-kpi-dashboard-backup.json", backup);
+      try {
+        const backup = { storage: "indexeddb" };
+        await Promise.all(STORES.map(async (store) => { backup[store] = await dbGetAll(store); }));
+        if (await hasReportApi()) {
+          const summaries = await listReports();
+          const reports = [];
+          for (const summary of summaries) {
+            const report = await getReport(summary.id);
+            if (report) reports.push(report);
+          }
+          backup.reports = reports;
+          backup.storage = "postgres";
+        }
+        exportJson("jira-kpi-dashboard-backup.json", backup);
+        notify(backup.storage === "postgres" ? "پشتیبان گزارش‌های پایگاه داده و داده‌های محلی ساخته شد." : "پشتیبان داده‌های محلی ساخته شد.");
+      } catch {
+        notify("ساخت پشتیبان ناموفق بود. اتصال ذخیره‌سازی را بررسی کنید.", "error");
+      }
     });
     document.getElementById("restoreBackupInput").addEventListener("change", async (event) => {
       try {
@@ -193,11 +283,24 @@ export class AppController {
       }
     });
     document.getElementById("clearDataBtn").addEventListener("click", async () => {
-      if (!confirm("همه داده‌های محلی حذف شود؟ این کار فایل‌های اصلی شما را تغییر نمی‌دهد.")) return;
+      const remote = await hasReportApi();
+      const message = remote
+        ? "همه گزارش‌های پایگاه داده و داده‌های محلی این داشبورد حذف شود؟ فایل‌های اصلی شما تغییر نمی‌کند."
+        : "همه داده‌های محلی حذف شود؟ این کار فایل‌های اصلی شما را تغییر نمی‌دهد.";
+      if (!confirm(message)) return;
+      let remoteFailed = false;
+      if (remote) {
+        try {
+          const reports = await listReports();
+          for (const report of reports) await deleteReport(report.id);
+        } catch {
+          remoteFailed = true;
+        }
+      }
       await dbClearAll();
       this.state.activeReport = null;
       await this.refreshReports();
-      notify("همه داده‌های محلی حذف شد.");
+      notify(remoteFailed ? "داده‌های محلی حذف شد، اما حذف گزارش‌ها از پایگاه داده ناموفق بود." : remote ? "گزارش‌های پایگاه داده و داده‌های محلی حذف شد." : "همه داده‌های محلی حذف شد.", remoteFailed ? "error" : "info");
     });
   }
 

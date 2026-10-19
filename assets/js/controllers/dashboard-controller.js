@@ -34,8 +34,10 @@ export function renderReport(report, reports, onOpenReport = () => {}) {
     document.getElementById(id)?.addEventListener("input", () => renderFilteredViews(report));
     document.getElementById(id)?.addEventListener("change", () => renderFilteredViews(report));
   });
-  document.getElementById("exportReconciliationBtn")?.addEventListener("click", () => exportJson("jira-kpi-reconciliation.json", report.reconciliation || {}));
-  document.getElementById("exportReportExcelBtn")?.addEventListener("click", () => exportReportExcel(report));
+  const reconciliationButton = document.getElementById("exportReconciliationBtn");
+  if (reconciliationButton) reconciliationButton.onclick = () => exportJson("jira-kpi-reconciliation.json", report.reconciliation || {});
+  const reportExcelButton = document.getElementById("exportReportExcelBtn");
+  if (reportExcelButton) reportExcelButton.onclick = () => exportReportExcel(report);
 }
 
 function recalculateReportCopy(report) {
@@ -65,7 +67,7 @@ function recalculateReportCopy(report) {
 
 function renderFilteredViews(report) {
   const filters = readActiveFilters();
-  const filtered = applyIssueFilters(report, filters);
+  const filtered = applyIssueFilters(report, filters).map((issue) => ({ ...issue }));
   const calculatedMetrics = {
     management: calculateManagementMetrics(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping),
     people: filterPeopleByFilters(calculatePersonDashboards(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping), filters)

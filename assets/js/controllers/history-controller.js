@@ -8,7 +8,19 @@ export async function loadReports() {
   return listReports();
 }
 
-export function wireHistory({ onOpen, onRefresh }) {
+export function duplicatedSettingsFromReport(source = {}) {
+  return {
+    metadata: {
+      teamName: source.teamName || "",
+      sprintName: source.sprintName || "",
+      dateFrom: source.dateFrom || "",
+      dateTo: source.dateTo || ""
+    },
+    mappingSnapshot: source.mappingSnapshot || null
+  };
+}
+
+export function wireHistory({ onOpen, onRefresh, onDuplicate }) {
   document.getElementById("historyList").addEventListener("click", async (event) => {
     const openId = event.target.dataset.openReport;
     const deleteId = event.target.dataset.deleteReport;
@@ -21,15 +33,21 @@ export function wireHistory({ onOpen, onRefresh }) {
       exportReportExcel(report);
     }
     if (deleteId && confirm("این گزارش حذف شود؟")) {
-      await deleteReport(deleteId);
-      notify("گزارش حذف شد.");
-      onRefresh();
+      try {
+        await deleteReport(deleteId);
+        notify("گزارش حذف شد.");
+        onRefresh();
+      } catch {
+        notify("حذف گزارش ناموفق بود. اتصال ذخیره‌سازی را بررسی کنید.", "error");
+      }
     }
     if (duplicateId) {
       const source = await getReport(duplicateId);
       if (!source) return notify("گزارش برای کپی تنظیمات پیدا نشد.", "error");
-      await dbPut("settings", { id: "last-duplicated-config", metadata: { teamName: source.teamName, sprintName: source.sprintName }, mappingSnapshot: source.mappingSnapshot });
-      notify("تنظیمات گزارش کپی شد.");
+      const settings = duplicatedSettingsFromReport(source);
+      await dbPut("settings", { id: "last-duplicated-config", ...settings });
+      await onDuplicate?.(source);
+      notify("تنظیمات گزارش در فرم بارگذاری قرار گرفت.");
     }
   });
 }

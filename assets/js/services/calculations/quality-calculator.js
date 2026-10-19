@@ -1,8 +1,10 @@
+import { distinctIssues } from "./issue-identity.js";
+
 export function hotfixCount(issues) {
-  return issues.filter((issue) => issue.labels.includes("hotfix")).length;
+  return distinctIssues(issues).filter((issue) => (issue.labels || []).includes("hotfix")).length;
 }
 
 export function bugfixCount(issues) {
-  return issues.filter((issue) => issue.labels.includes("bugfix")).length;
+  return distinctIssues(issues).filter((issue) => (issue.labels || []).includes("bugfix")).length;
 }
 

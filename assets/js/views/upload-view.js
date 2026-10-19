@@ -1,3 +1,4 @@
+import { readSelectionTokens, sameSelection } from "../utils/upload-selection.js";
 import { escapeHtml } from "../utils/helpers.js";
 
 export const FILE_STATUS = {
@@ -57,7 +58,14 @@ export function renderPreview(state) {
 }
 
 export function evaluateGenerateReadiness(state) {
-  if (!state.jira || !state.capacity || !state.kpi) {
+  if (state?.parsing || state?.generating) {
+    return { ready: false, reason: "خواندن یا ذخیره گزارش در حال انجام است." };
+  }
+  if (typeof document?.getElementById === "function") {
+    if (!state?.jira || !state?.capacity || !state?.kpi || !sameSelection(state.parsedSelection, readSelectionTokens())) {
+      return { ready: false, reason: "برای تولید گزارش، هر سه فایل انتخاب‌شده باید با موفقیت خوانده شده باشند." };
+    }
+  } else if (!state?.jira || !state?.capacity || !state?.kpi) {
     return { ready: false, reason: "برای تولید گزارش، هر سه فایل Jira، ظرفیت و KPI باید خوانده شوند." };
   }
   const fieldInputs = [...document.querySelectorAll("[data-field-key]")];

@@ -3,6 +3,7 @@ import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
 import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
 import { renderHistory } from "../assets/js/views/history-view.js";
+import { selectionTokensFromFiles } from "../assets/js/utils/upload-selection.js";
 import { buildDataQualityWorkbookSheets, buildManagementWorkbookSheets, buildReportWorkbookSheets, buildScrumWorkbookSheets } from "../assets/js/services/export-service.js";
 import { deleteReport, getReport, resetReportApiProbe, saveReport } from "../assets/js/services/report-storage-service.js";
 
@@ -61,52 +62,35 @@ test("Filters: team and sprint text filters can exclude a report", () => {
 });
 
 test("Upload readiness: disabled until files and mappings exist", () => {
-  const oldDocument = globalThis.document;
-  globalThis.document = {
-    querySelectorAll(selector) {
-      if (selector === "[data-field-key]") return [];
-      if (selector === "#personMappingTable tbody tr") return [];
-      return [];
-    }
-  };
+  const cleanup = mountFixture(fileInputs());
   try {
-    const result = evaluateGenerateReadiness({ jira: {}, capacity: {}, kpi: {} });
-    equal(result.ready, false);
-    ok(result.reason.includes("نگاشت"));
+    const parsedSelection = assignSelectedFiles();
+    const unread = evaluateGenerateReadiness({ jira: {}, capacity: {}, kpi: {}, parsedSelection: null });
+    equal(unread.ready, false);
+    ok(unread.reason.includes("خوانده"));
+    const unmapped = evaluateGenerateReadiness({ jira: {}, capacity: {}, kpi: {}, parsedSelection });
+    equal(unmapped.ready, false);
+    ok(unmapped.reason.includes("نگاشت"));
   } finally {
-    globalThis.document = oldDocument;
+    cleanup();
   }
 });
 
 test("Upload readiness: enabled when required mappings and people are valid", () => {
-  const oldDocument = globalThis.document;
-  globalThis.document = {
-    querySelectorAll(selector) {
-      if (selector === "[data-field-key]") return [
-        { dataset: { required: "true" }, value: "Issue key" },
-        { dataset: { required: "true" }, value: "Status" }
-      ];
-      if (selector === "#personMappingTable tbody tr") return [
-        { querySelector: () => ({ checked: true }) }
-      ];
-      return [];
-    }
-  };
+  const cleanup = mountFixture(`${fileInputs()}
+    <input data-field-key="issueKey" data-required="true" value="Issue key">
+    <input data-field-key="status" data-required="true" value="Status">
+    <table id="personMappingTable"><tbody><tr><td><input data-person-field="enabled" type="checkbox" checked></td></tr></tbody></table>`);
   try {
-    equal(evaluateGenerateReadiness({ jira: {}, capacity: {}, kpi: {} }).ready, true);
+    const parsedSelection = assignSelectedFiles();
+    equal(evaluateGenerateReadiness({ jira: {}, capacity: {}, kpi: {}, parsedSelection }).ready, true);
   } finally {
-    globalThis.document = oldDocument;
+    cleanup();
   }
 });
 
 test("Person dashboards expose new metric drill-down buttons", () => {
-  const oldDocument = globalThis.document;
-  const target = { innerHTML: "", querySelectorAll: () => [] };
-  globalThis.document = {
-    getElementById(id) {
-      return id === "scrumDashboards" ? target : null;
-    }
-  };
+  const cleanup = mountFixture(`<div id="scrumDashboards"></div>`);
   try {
     renderScrumDashboards([{
       name: "Dev A",
@@ -127,12 +111,13 @@ test("Person dashboards expose new metric drill-down buttons", () => {
         carryOverLoggedIssueKeys: [{ issueKey: "C-1", planType: "Carry Over" }]
       }
     }]);
+    const target = document.getElementById("scrumDashboards");
     ok(target.innerHTML.includes('data-person-drill="plannedIssueCount"'));
     ok(target.innerHTML.includes('data-person-drill="carryOverWorkLogged"'));
     equal(target.innerHTML.includes(">Carry Over</h3><div class=\"kpi-value\">99h"), false);
     equal(target.innerHTML.includes("carry_over"), false);
   } finally {
-    globalThis.document = oldDocument;
+    cleanup();
   }
 });
 
@@ -156,20 +141,15 @@ test("Excel export: report workbook contains Persian summary and issue sheets", 
 });
 
 test("Report history view exposes open and Excel export actions", () => {
-  const oldDocument = globalThis.document;
-  const target = { innerHTML: "" };
-  globalThis.document = {
-    getElementById(id) {
-      return id === "historyList" ? target : null;
-    }
-  };
+  const cleanup = mountFixture(`<div id="historyList"></div>`);
   try {
     renderHistory([{ id: "r-1", teamName: "تیم محصول", sprintName: "26.1", createdAt: "2026-01-01T00:00:00.000Z" }]);
+    const target = document.getElementById("historyList");
     ok(target.innerHTML.includes("باز کردن گزارش"));
     ok(target.innerHTML.includes("خروجی Excel گزارش"));
     ok(target.innerHTML.includes('data-export-report="r-1"'));
   } finally {
-    globalThis.document = oldDocument;
+    cleanup();
   }
 });
 
@@ -228,4 +208,33 @@ test("Report storage: API availability avoids IndexedDB fallback", async () => {
 
 function jsonResponse(payload) {
   return { ok: true, status: 200, statusText: "OK", json: async () => payload };
+}
+
+function mountFixture(html) {
+  const root = document.createElement("div");
+  root.dataset.uiTestFixture = "true";
+  root.innerHTML = html;
+  document.body.append(root);
+  return () => root.remove();
+}
+
+function fileInputs() {
+  return `<input id="jiraFile" type="file"><input id="capacityFile" type="file"><input id="kpiFile" type="file">`;
+}
+
+function assignSelectedFiles() {
+  const specs = [
+    ["jiraFile", "jira.xlsx", "jira"],
+    ["capacityFile", "capacity.xlsx", "capacity"],
+    ["kpiFile", "kpi.docx", "kpi"]
+  ];
+  const files = {};
+  for (const [id, name, key] of specs) {
+    const input = document.getElementById(id);
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([key], name, { lastModified: 1700000000000 }));
+    input.files = transfer.files;
+    files[key] = input.files[0];
+  }
+  return selectionTokensFromFiles(files);
 }

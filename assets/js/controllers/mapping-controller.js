@@ -28,13 +28,18 @@ export function wireMappingActions(state) {
   document.getElementById("exportMappingsBtn").addEventListener("click", () => exportJson("person-mappings.json", serializePersonMappings(document.getElementById("personMappingTable"))));
   document.getElementById("importMappingsInput").addEventListener("change", async (event) => {
     const file = event.target.files[0];
+    event.target.value = "";
     if (!file) return;
-    const mappings = JSON.parse(await file.text());
-    if (!Array.isArray(mappings)) throw new Error("فایل نگاشت معتبر نیست.");
-    state.personMappings = mappings;
-    renderPersonMappings(mappings, state.jira?.main.headers || []);
-    await dbPut("personMappings", { id: "default", mappings, updatedAt: new Date().toISOString() });
-    notify("نگاشت افراد وارد شد.");
+    try {
+      const mappings = JSON.parse(await file.text());
+      if (!Array.isArray(mappings)) throw new Error("فایل نگاشت معتبر نیست.");
+      state.personMappings = mappings;
+      renderPersonMappings(mappings, state.jira?.main.headers || []);
+      await dbPut("personMappings", { id: "default", mappings, updatedAt: new Date().toISOString() });
+      notify("نگاشت افراد وارد شد.");
+    } catch {
+      notify("فایل نگاشت معتبر نیست. یک فایل JSON سالم انتخاب کنید.", "error");
+    }
   });
 }
 

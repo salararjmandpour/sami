@@ -8,7 +8,7 @@ export async function saveReport(report) {
       await apiJson("/api/reports", { method: "POST", body: JSON.stringify({ report }) });
       return report;
     } catch (error) {
-      console.warn("PostgreSQL report save failed; IndexedDB copy was kept.", error);
+      console.warn("PostgreSQL report save failed; saving the report in IndexedDB instead.", error);
       apiStatus = false;
     }
   }
@@ -47,13 +47,8 @@ export async function getReport(id) {
 export async function deleteReport(id) {
   if (!id) return;
   if (await hasReportApi()) {
-    try {
-      await apiJson(`/api/reports/${encodeURIComponent(id)}`, { method: "DELETE" });
-      return;
-    } catch (error) {
-      console.warn("PostgreSQL report delete failed; deleting local IndexedDB copy only.", error);
-      apiStatus = false;
-    }
+    await apiJson(`/api/reports/${encodeURIComponent(id)}`, { method: "DELETE" });
+    return;
   }
   await dbDelete("reports", id);
 }

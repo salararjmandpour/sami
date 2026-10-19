@@ -9,10 +9,11 @@ import { estimationAccuracy, timeVariance } from "./estimation-calculator.js";
 import { normalizePossibleExcelHours } from "../normalization/unit-normalizer.js";
 import { buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown } from "../work-log-category-service.js";
 import { hasReachedInProgress, startDetectionSource } from "../normalization/status-normalizer.js";
+import { distinctIssues } from "./issue-identity.js";
 
 function workMix(issues) {
   const byPlan = { planned: 0, unplanned: 0, carry_over: 0 };
-  issues.forEach((issue) => {
+  distinctIssues(issues).forEach((issue) => {
     if (byPlan[issue.planType] !== undefined) byPlan[issue.planType] += (issue.devEstimate || 0) + (issue.testEstimate || 0);
   });
   const total = byPlan.planned + byPlan.unplanned + byPlan.carry_over;
@@ -21,16 +22,6 @@ function workMix(issues) {
     plannedPercent: ratio(byPlan.planned, total),
     unplannedPercent: ratio(byPlan.unplanned, total)
   };
-}
-
-function distinctIssues(issues) {
-  const seen = new Set();
-  return issues.filter((issue) => {
-    const key = comparable(issue.issueKey || issue.issueKeyComparable);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function issueCountMetric(issues) {
@@ -106,7 +97,7 @@ function capacityDebug(capacityRecord) {
 
 export function calculateManagementMetrics(issues, capacityPeople, mappings, workCategoryMapping) {
   const mix = workMix(issues);
-  const plannedUnplanned = issues.filter((issue) => ["planned", "unplanned"].includes(issue.planType));
+  const plannedUnplanned = distinctIssues(issues).filter((issue) => ["planned", "unplanned"].includes(issue.planType));
   const workload = sum(plannedUnplanned.map((issue) => (issue.devEstimate || 0) + (issue.testEstimate || 0)));
   const capacity = totalUniqueCapacity(capacityPeople, mappings);
   const totalPlannedCapacity = totalUniqueCapacityField(capacityPeople, mappings, "plannedCapacity");
@@ -116,7 +107,7 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
   const workLogBreakdown = buildManagementWorkLogBreakdown(issues, mappings, {}, workCategoryMapping);
   const workLogged = workLogBreakdown.totals.rawWorkLoggedHours;
   const productiveIssueKeys = new Set(workLogBreakdown.rows.filter((row) => row.workCategory === "productive").map((row) => row.issueKey));
-  const productiveIssues = issues.filter((issue) => productiveIssueKeys.has(issue.issueKey));
+  const productiveIssues = distinctIssues(issues).filter((issue) => productiveIssueKeys.has(issue.issueKey));
   const productiveEstimated = sum(productiveIssues.map((issue) => (issue.devEstimate || 0) + (issue.testEstimate || 0)));
   const productiveWorkLogged = workLogBreakdown.totals.productiveWorkLoggedHours;
   const plannedIssues = distinctIssues(issues.filter((issue) => issue.planType === "planned"));
@@ -164,9 +155,9 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
     versionWorkLogged: metric(workLogBreakdown.totals.versionWorkLoggedHours, "h"),
     technicalVersionWorkLogged: metric(workLogBreakdown.totals.technicalVersionWorkLoggedHours, "h"),
     nonProductiveWorkLogged: metric(workLogBreakdown.totals.nonProductiveWorkLoggedHours, "h"),
-    leadTime: metric(average(issues.map((issue) => issue.leadTimeHours)), "h"),
-    cycleTime: metric(average(issues.map((issue) => issue.cycleTimeHours)), "h"),
-    blockedTime: metric(sum(issues.map((issue) => issue.blockedHours || 0)), "h"),
+    leadTime: metric(average(distinctIssues(issues).map((issue) => issue.leadTimeHours)), "h"),
+    cycleTime: metric(average(distinctIssues(issues).map((issue) => issue.cycleTimeHours)), "h"),
+    blockedTime: metric(sum(distinctIssues(issues).map((issue) => issue.blockedHours || 0)), "h"),
     estimationAccuracy: metric(estimationAccuracy(productiveEstimated, productiveWorkLogged), "%", "Productive Work Logged صفر یا خالی است.", {
       productiveEstimatedHours: productiveEstimated,
       productiveWorkLoggedHours: productiveWorkLogged,
@@ -177,7 +168,7 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
     averageStorySize: metric(averageStorySize, "", "Story Points یا داستان تکمیل‌شده کافی نیست."),
     reworkRate: metric(null, "", "فیلد Rework Time وجود ندارد."),
     wip: metric(null, "", "برای WIP میانگین، تاریخچه انتقال یا snapshot تاریخی لازم است."),
-    timeVariance: metric(timeVariance(issues), "h"),
+    timeVariance: metric(timeVariance(distinctIssues(issues)), "h"),
     workMix: mix,
     planningDrillDown: {
       plannedIssueKeys: drillRows(plannedIssues, workLogBreakdown),
@@ -221,13 +212,14 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
       if (role === "qa") return comparable(issue.qaOwner) === comparable(mapping.jiraName);
       return comparable(issue.assignee) === comparable(mapping.jiraName);
     });
+    const relatedIssues = distinctIssues(related);
     const capacity = personCapacity(capacityPeople, mapping);
     const capacityRecord = personCapacityRecord(capacityPeople, mapping);
     const plannedCapacity = capacityRecord?.plannedCapacity ?? null;
     const unplannedCapacity = capacityRecord?.unplannedCapacity ?? null;
-    const planned = sum(related.filter((i) => i.planType === "planned").map((i) => role === "qa" ? i.testEstimate || 0 : i.devEstimate || 0));
-    const unplanned = sum(related.filter((i) => i.planType === "unplanned").map((i) => role === "qa" ? i.testEstimate || 0 : i.devEstimate || 0));
-    const carry = sum(related.filter((i) => i.planType === "carry_over").map((i) => role === "qa" ? i.testEstimate || 0 : i.devEstimate || 0));
+    const planned = sum(relatedIssues.filter((i) => i.planType === "planned").map((i) => role === "qa" ? i.testEstimate || 0 : i.devEstimate || 0));
+    const unplanned = sum(relatedIssues.filter((i) => i.planType === "unplanned").map((i) => role === "qa" ? i.testEstimate || 0 : i.devEstimate || 0));
+    const carry = sum(relatedIssues.filter((i) => i.planType === "carry_over").map((i) => role === "qa" ? i.testEstimate || 0 : i.devEstimate || 0));
     const workloadForCapacity = role === "qa" ? planned + unplanned + carry : planned + unplanned;
     const workLogBreakdown = buildPersonWorkLogBreakdown(issues, mapping, workCategoryMapping);
     const relatedWorkLogBreakdown = buildPersonWorkLogBreakdown(related, mapping, workCategoryMapping);
@@ -245,9 +237,9 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
     const carryOverIssuesLogged = related.filter((issue) => carryOverLoggedRows.some((row) => comparable(row.issueKey) === comparable(issue.issueKey)));
     const workLogged = workLogBreakdown.totals.rawWorkLoggedHours;
     const qa = qaMetrics(related);
-    const estimated = role === "qa" ? sum(related.map((i) => i.testEstimate || 0)) : sum(related.map((i) => i.devEstimate || 0));
+    const estimated = role === "qa" ? sum(relatedIssues.map((i) => i.testEstimate || 0)) : sum(relatedIssues.map((i) => i.devEstimate || 0));
     const productiveRelatedKeys = new Set(relatedWorkLogBreakdown.rows.filter((row) => row.workCategory === "productive").map((row) => row.issueKey));
-    const productiveRelated = related.filter((issue) => productiveRelatedKeys.has(issue.issueKey));
+    const productiveRelated = relatedIssues.filter((issue) => productiveRelatedKeys.has(issue.issueKey));
     const productiveEstimated = role === "qa" ? sum(productiveRelated.map((i) => i.testEstimate || 0)) : sum(productiveRelated.map((i) => i.devEstimate || 0));
     return {
       name: mapping.jiraName,

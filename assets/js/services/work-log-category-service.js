@@ -113,7 +113,13 @@ export function selectManagementWorkLogColumn(issues, personMappings = []) {
 }
 
 export function sumMappedPersonColumns(issue, personMappings = []) {
-  return sum(personMappings.filter((mapping) => mapping.enabled !== false && mapping.workLogColumn).map((mapping) => {
+  const seen = new Set();
+  return sum(personMappings.filter((mapping) => mapping.enabled !== false && mapping.workLogColumn).filter((mapping) => {
+    const column = comparable(mapping.workLogColumn);
+    if (seen.has(column)) return false;
+    seen.add(column);
+    return true;
+  }).map((mapping) => {
     const meta = getMeta(issue, mapping.workLogColumn);
     return normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], meta).hours || 0;
   }));

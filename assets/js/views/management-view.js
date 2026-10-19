@@ -52,7 +52,7 @@ export function renderSourceActions(report) {
   target.innerHTML = `<section class="panel source-actions" aria-labelledby="sourceActionsTitle">
     <h3 id="sourceActionsTitle">اقدامات پیشنهادی برای اصلاح داده‌های Jira</h3>
     <div class="action-row">
-      <button id="exportReportExcelBtn" class="button button-secondary" type="button">خروجی Excel گزارش</button>
+      <button id="exportReportExcelBtn" class="button button-secondary" type="button">خروجی Excel گزارش ذخیره‌شده</button>
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>شدت</th><th>مسئله</th><th>تعداد</th><th>ساعت</th><th>Issue Keyها</th><th>اقدام پیشنهادی در Jira</th></tr></thead>

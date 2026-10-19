@@ -1,4 +1,5 @@
 import { normalizeString } from "../normalization/string-normalizer.js";
+import { assertDocxBytes } from "../../utils/file-signature.js";
 
 function extractTablesFromHtml(html) {
   if (typeof document === "undefined") return extractTablesWithRegex(html);
@@ -25,8 +26,14 @@ function extractTablesWithRegex(html) {
 
 export async function parseKpiDocx(file, arrayBuffer) {
   if (!window.mammoth) throw new Error("کتابخانه Mammoth بارگذاری نشده است.");
+  assertDocxBytes(arrayBuffer);
   console.group?.("KPI Parsing");
-  const result = await mammoth.convertToHtml({ arrayBuffer });
+  let result;
+  try {
+    result = await mammoth.convertToHtml({ arrayBuffer });
+  } catch {
+    throw new Error("فایل KPI خوانده نشد. یک سند DOCX سالم انتخاب کنید.");
+  }
   const tables = extractTablesFromHtml(result.value);
   const rows = tables.flat().filter((cells) => cells.length >= 2);
   const body = rows.filter((cells, index) => index > 0 || !/kpi|شاخص/i.test(cells[0]));
@@ -46,6 +53,7 @@ export async function parseKpiDocx(file, arrayBuffer) {
       interpretation: cells[4] || ""
     })).filter((kpi) => kpi.name && !/kpi|شاخص/i.test(kpi.name))
   };
+  if (!parsed.kpis.length) throw new Error("در سند KPI تعریف قابل استفاده‌ای پیدا نشد.");
   console.log?.({ fileName: file.name, tableCount: parsed.diagnostics.tableCount, kpis: parsed.kpis.length, warnings: parsed.warnings.length });
   console.groupEnd?.();
   return parsed;

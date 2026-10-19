@@ -19,8 +19,7 @@ export function applyIssueFilters(report, filters = readActiveFilters()) {
   if (filters.sprint && !comparable(report?.sprintName || "").includes(comparable(filters.sprint))) return [];
   if (filters.status) issues = issues.filter((issue) => issue.statusCanonical === filters.status);
   if (filters.planType) issues = issues.filter((issue) => issue.planType === filters.planType);
-  if (filters.dateFrom) issues = issues.filter((issue) => !issue.created || dateValue(issue.created) >= dateValue(filters.dateFrom));
-  if (filters.dateTo) issues = issues.filter((issue) => !issue.created || dateValue(issue.created) <= dateValue(filters.dateTo));
+  issues = filterIssuesByCreatedRange(issues, filters.dateFrom, filters.dateTo);
   if (filters.person) {
     const person = comparable(filters.person);
     issues = issues.filter((issue) => comparable(issue.assignee) === person || comparable(issue.qaOwner) === person);
@@ -30,6 +29,31 @@ export function applyIssueFilters(report, filters = readActiveFilters()) {
     issues = issues.filter((issue) => names.has(comparable(filters.role === "qa" ? issue.qaOwner : issue.assignee)));
   }
   return issues;
+}
+
+export function filterIssuesByCreatedRange(issues, dateFrom, dateTo) {
+  return partitionIssuesByCreatedRange(issues, dateFrom, dateTo).included;
+}
+
+export function partitionIssuesByCreatedRange(issues, dateFrom, dateTo) {
+  const source = issues || [];
+  if (!dateFrom && !dateTo) return { included: source, missingCreated: [], outsideRange: [] };
+  const included = [];
+  const missingCreated = [];
+  const outsideRange = [];
+  source.forEach((issue) => {
+    const created = dateValue(issue?.created);
+    if (created === null) {
+      missingCreated.push(issue);
+      return;
+    }
+    if ((dateFrom && created < dateValue(dateFrom)) || (dateTo && created > dateValue(dateTo))) {
+      outsideRange.push(issue);
+      return;
+    }
+    included.push(issue);
+  });
+  return { included, missingCreated, outsideRange };
 }
 
 function dateValue(value) {

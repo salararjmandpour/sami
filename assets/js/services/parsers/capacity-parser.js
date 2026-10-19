@@ -2,7 +2,7 @@ import { cleanHeaders } from "../normalization/header-normalizer.js";
 import { CAPACITY_COLUMN_ALIASES } from "../../config/capacity-column-mapping.js";
 import { normalizeString, comparable, looseComparable } from "../normalization/string-normalizer.js";
 import { normalizeHours } from "../normalization/unit-normalizer.js";
-import { detectFileSignature } from "../../utils/file-signature.js";
+import { assertSpreadsheetBytes } from "../../utils/file-signature.js";
 
 function findSummaryRow(rows, canonical, { fuzzyTotal = false } = {}) {
   const aliases = CAPACITY_COLUMN_ALIASES[canonical] || [];
@@ -42,11 +42,12 @@ function diagnosticsFor(sheet, sheetName) {
 
 export async function parseCapacityWorkbook(file, arrayBuffer) {
   if (!window.XLSX) throw new Error("کتابخانه SheetJS بارگذاری نشده است.");
-  const signature = detectFileSignature(arrayBuffer);
+  const signature = assertSpreadsheetBytes(arrayBuffer, "فایل ظرفیت");
   console.group?.("Capacity Parsing");
   const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: false, cellNF: true, cellFormula: true });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
+  const sheetName = workbook.SheetNames?.[0];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) throw new Error("فایل ظرفیت هیچ شیتی ندارد.");
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
   const headerIndex = rows.findIndex((row) => row.filter((cell) => normalizeString(cell)).length > 1);
   const originalHeaders = rows[Math.max(headerIndex, 0)] || [];
@@ -91,6 +92,7 @@ export async function parseCapacityWorkbook(file, arrayBuffer) {
       unresolved: !normalizeString(displayName)
     });
   });
+  if (!people.some((person) => person.capacityName && !person.unresolved)) throw new Error("فایل ظرفیت ستون فردی قابل استفاده ندارد.");
   const result = { fileName: file.name, signature, sheetNames: workbook.SheetNames, selectedSheet: sheetName, headers, originalHeaders, people, rawRows: rows, diagnostics };
   console.log?.({ fileName: file.name, sheetNames: workbook.SheetNames, people: people.length, formulas: diagnostics.formulas.length });
   console.groupEnd?.();
