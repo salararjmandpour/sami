@@ -12,7 +12,11 @@ const mappings = [
   { capacityId: "c2", capacityName: "QA", jiraName: "QA A", role: "qa", workLogColumn: "Work A", enabled: true }
 ];
 
-test("Management Capacity Utilization", () => close(calculateManagementMetrics(issues, capacity, mappings).capacityUtilization.value, 46.666));
+test("Management Capacity Utilization uses development estimates and developer capacity", () => {
+  const metrics = calculateManagementMetrics(issues, capacity, mappings);
+  close(metrics.capacityUtilization.value, 50);
+  close(metrics.capacityUtilizationQa.value, 70);
+});
 test("Delivery Rate Develop", () => equal(calculateManagementMetrics(issues, capacity, mappings).deliveryRateDevelop.value, 100));
 test("Delivery Rate", () => equal(calculateManagementMetrics(issues, capacity, mappings).deliveryRate.value, 50));
 test("QA Return Rate", () => equal(calculateManagementMetrics(issues, capacity, mappings).qaReturnRate.value, 50));
@@ -50,7 +54,21 @@ test("Planned Start Rate returns N/A when Planned Issue Count is zero", () => eq
 test("QA ownership uses Content Point/QA owner", () => equal(calculatePersonDashboards([{ ...enhancedIssues[0], assignee: "Dev A", qaOwner: "QA B", testEstimate: 3 }], [{ id: "q", capacityName: "QA", availableCapacity: 10, plannedCapacity: 8, unplannedCapacity: 2 }], [{ capacityId: "q", capacityName: "QA", jiraName: "QA B", role: "qa", workLogColumn: "Dev Work", enabled: true }])[0].metrics.plannedIssueCount.value, 1));
 test("Duplicate issue rows do not repeat estimate hours", () => {
   const metrics = calculateManagementMetrics(enhancedIssues, enhancedCapacity, enhancedMappings);
-  equal(metrics.plannedWork.value, 6);
+  equal(metrics.workMix.planned, 6);
+  equal(metrics.plannedWork.hours, 6);
+  equal(metrics.plannedWork.value, 25);
   equal(metrics.rawWorkLogged.value, 21);
 });
 test("Shared work-log column is counted once", () => equal(calculateManagementMetrics(issues, capacity, mappings).rawWorkLogged.value, 12));
+test("Blocked time is unavailable when the source column is empty", () => {
+  const metrics = calculateManagementMetrics(issues.map((issue) => ({ ...issue, blockedHours: null })), capacity, mappings);
+  equal(metrics.blockedTime.value, null);
+});
+test("Hotfix and bug counts use issue type as well as labels", () => {
+  const metrics = calculateManagementMetrics([
+    { ...issues[0], issueKey: "H-1", issueKeyComparable: "h-1", issueType: "Hotfix", labels: [] },
+    { ...issues[1], issueKey: "B-1", issueKeyComparable: "b-1", issueType: "Bug", labels: [] }
+  ], capacity, mappings);
+  equal(metrics.hotfixCount.value, 1);
+  equal(metrics.bugfixCount.value, 1);
+});

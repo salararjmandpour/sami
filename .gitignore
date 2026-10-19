@@ -5,4 +5,5 @@ Thumbs.db
 .idea/
 tmp/
 temp/
+tmp-audit/
 node_modules/

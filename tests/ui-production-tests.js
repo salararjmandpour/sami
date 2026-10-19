@@ -5,7 +5,7 @@ import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
 import { renderHistory } from "../assets/js/views/history-view.js";
 import { selectionTokensFromFiles } from "../assets/js/utils/upload-selection.js";
 import { buildDataQualityWorkbookSheets, buildManagementWorkbookSheets, buildReportWorkbookSheets, buildScrumWorkbookSheets } from "../assets/js/services/export-service.js";
-import { deleteReport, getReport, resetReportApiProbe, saveReport } from "../assets/js/services/report-storage-service.js";
+import { deleteReport, getReport, postgresApiIsConnected, resetReportApiProbe, saveReport, storageSavedMessage } from "../assets/js/services/report-storage-service.js";
 
 const issues = [
   { issueKey: "A-1", statusCanonical: "done", planType: "planned", assignee: "Sara", qaOwner: "Ali", created: "2026-01-02" },
@@ -185,7 +185,7 @@ test("Report storage: API availability avoids IndexedDB fallback", async () => {
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, method: options.method || "GET" });
-    if (url === "/api/health") return jsonResponse({ ok: true, storage: "postgres" });
+    if (url === "/api/health") return jsonResponse({ ok: true, storage: "postgres", database: "connected" });
     if (url === "/api/reports" && options.method === "POST") return jsonResponse({ report: { id: "r-1" } });
     if (url === "/api/reports/r-1") return jsonResponse(options.method === "DELETE" ? { ok: true } : { report: { id: "r-1", teamName: "تیم" } });
     throw new Error(`unexpected fetch ${url}`);
@@ -202,6 +202,34 @@ test("Report storage: API availability avoids IndexedDB fallback", async () => {
     globalThis.fetch = oldFetch;
     if (oldIndexedDb) Object.defineProperty(globalThis, "indexedDB", oldIndexedDb);
     else delete globalThis.indexedDB;
+    resetReportApiProbe();
+  }
+});
+
+test("Report storage: a Postgres health response without a database check is not treated as connected", () => {
+  equal(postgresApiIsConnected({ ok: true, storage: "postgres" }), false);
+  equal(postgresApiIsConnected({ ok: true, storage: "postgres", database: "connected" }), true);
+});
+
+test("Report storage: a failed Postgres save is identified as browser-only", async () => {
+  const oldFetch = globalThis.fetch;
+  const writes = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === "/api/health") return jsonResponse({ ok: true, storage: "postgres", database: "connected" });
+    if (url === "/api/reports" && options.method === "POST") throw new Error("database unavailable");
+    throw new Error(`unexpected fetch ${url}`);
+  };
+  resetReportApiProbe();
+  try {
+    const saved = await saveReport({ id: "legacy-1", teamName: "تیم", normalizedData: { issues: [] } }, { put: async (report) => { writes.push(report); } });
+    equal(saved.storage, "indexeddb");
+    equal(saved.fallback, true);
+    equal(writes.length, 1);
+    equal(writes[0].normalizedData.issues.length, 0);
+    ok(storageSavedMessage(saved).includes("فقط در مرورگر"));
+    ok(!storageSavedMessage(saved).includes("در PostgreSQL ذخیره شد."));
+  } finally {
+    globalThis.fetch = oldFetch;
     resetReportApiProbe();
   }
 });

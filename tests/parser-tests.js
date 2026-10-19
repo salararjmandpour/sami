@@ -11,6 +11,11 @@ test("XLS signature detection", () => equal(detectFileSignature(new Uint8Array([
 test("XLS with incorrect XLSX extension uses signature", () => equal(detectFileSignature(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).buffer), "ole"));
 test("Header trimming", () => equal(cleanHeaders(["  Key   Name  "])[0], "Key Name"));
 test("QA Return key extraction", () => ok(extractQaKeys([{ Key: " ABC-1 " }]).has("ABC-1")));
+test("QA Return without a header keeps the first issue key", () => {
+  const keys = extractQaKeys([{ "PCMP-1": "PCMP-2" }, { "PCMP-1": "PCMP-3" }], ["PCMP-1", "Summary"]);
+  equal(keys.size, 3);
+  ok(keys.has("PCMP-1") && keys.has("PCMP-2") && keys.has("PCMP-3"));
+});
 test("DOCX table extraction placeholder", () => ok(Boolean(window.mammoth)));
 test("Cached formula-value reading placeholder", () => ok(Boolean(window.XLSX)));
 test("Merged capacity-header handling placeholder", () => ok(true));

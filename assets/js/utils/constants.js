@@ -1,7 +1,7 @@
 export const CALCULATION_VERSION = "1.1.0";
 export const REQUIRED_FIELDS = ["issueKey", "status"];
 export const KPI_CARD_ORDER = [
-  "capacityUtilization", "totalPlannedCapacity", "totalUnplannedCapacity", "totalPlannedIssueCount",
+  "capacityUtilization", "capacityUtilizationQa", "totalPlannedCapacity", "totalUnplannedCapacity", "totalPlannedIssueCount",
   "totalStartedPlannedIssueCount", "totalUnplannedIssueCount", "totalStartedUnplannedIssueCount",
   "plannedStartRate", "unplannedStartRate", "plannedProductiveWork", "unplannedProductiveWork",
   "plannedCapacityUtilization", "unplannedCapacityUtilization", "plannedWork", "unplannedWork", "carryOver", "deliveryRateDevelop",
@@ -33,6 +33,7 @@ export const KPI_LABELS = {
   unplannedCapacityUtilization: "Unplanned Capacity Utilization",
   carryOverWorkLogged: "Carry Over Work Logged",
   capacityUtilization: "بهره‌برداری ظرفیت",
+  capacityUtilizationQa: "بهره‌برداری ظرفیت QA",
   plannedWork: "کار برنامه‌ریزی‌شده",
   unplannedWork: "کار خارج از برنامه",
   carryOver: "Carry Over",

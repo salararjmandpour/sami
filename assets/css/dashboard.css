@@ -3,6 +3,10 @@
 .kpi-card h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 700; }
 .kpi-value { font-size: 27px; font-weight: 800; color: var(--primary-dark); overflow-wrap: anywhere; }
 .kpi-reason { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.kpi-status-decision { display: inline-block; margin-top: 8px; padding: 2px 8px; border-radius: 999px; background: #f4f1ea; color: #5c5346; font-size: 12px; font-weight: 700; }
+.kpi-help { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.kpi-help summary { cursor: pointer; color: var(--primary-dark); }
+.kpi-help p { margin: 6px 0 0; }
 .person-dashboard { margin-bottom: 20px; }
 .person-dashboard h3 { margin: 0 0 12px; }
 .chart-grid canvas { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-height: 260px; box-shadow: var(--shadow-sm); }

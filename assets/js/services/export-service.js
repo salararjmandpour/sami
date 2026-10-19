@@ -1,5 +1,6 @@
 import { downloadText } from "../utils/helpers.js";
 import { KPI_LABELS } from "../utils/constants.js";
+import { isLegacyPublicationSnapshot, LEGACY_PUBLICATION_STATUS } from "./kpi-publication.js";
 
 export function exportJson(filename, data) {
   downloadText(filename, JSON.stringify(data, null, 2), "application/json");
@@ -103,7 +104,8 @@ function buildSummaryRows(report, issues, people, quality) {
     ["خطاهای کیفیت داده", counts.error],
     ["هشدارهای کیفیت داده", counts.warning],
     ["اطلاعات کیفیت داده", counts.info],
-    ["وضعیت ممیزی", report?.reconciliation?.reconciliationStatus || ""]
+    ["وضعیت ممیزی", report?.reconciliation?.reconciliationStatus || ""],
+    ["فراداده تعریف KPI", isLegacyPublicationSnapshot(report) ? LEGACY_PUBLICATION_STATUS : "در نسخه ذخیره‌شده موجود است"]
   ];
 }
 
@@ -129,22 +131,51 @@ function buildFilterRows(report, filters) {
 }
 
 function buildMetricRows(metrics) {
-  const rows = [["KPI", "کلید", "مقدار نمایشی", "مقدار", "واحد", "دلیل"]];
+  const rows = [["KPI", "کلید", "مقدار نمایشی", "مقدار محاسبه‌شده", "مقدار رسمی تأییدشده", "وضعیت تعریف", "بازه محاسبه", "بازه ظرفیت", "فرض بازمانده", "واحد", "دلیل"]];
   Object.entries(metrics).forEach(([key, metric]) => {
     if (!metric || typeof metric !== "object" || !("displayValue" in metric || "value" in metric)) return;
-    rows.push([KPI_LABELS[key] || key, key, metric.displayValue ?? "", metric.value ?? "", metric.unit ?? "", metric.reason ?? ""]);
+    rows.push(metricExportRow(KPI_LABELS[key] || key, key, metric));
   });
   return rows;
 }
 
 function buildPeopleRows(people) {
-  const rows = [["شخص", "نقش", "KPI", "کلید", "مقدار نمایشی", "مقدار", "واحد", "دلیل"]];
+  const rows = [["شخص", "نقش", "KPI", "کلید", "مقدار نمایشی", "مقدار محاسبه‌شده", "مقدار رسمی تأییدشده", "وضعیت تعریف", "بازه محاسبه", "بازه ظرفیت", "فرض بازمانده", "واحد", "دلیل"]];
   people.forEach((person) => {
     Object.entries(person.metrics || {}).forEach(([key, metric]) => {
-      rows.push([person.name || "", person.role || "", KPI_LABELS[key] || key, key, metric?.displayValue ?? "", metric?.value ?? "", metric?.unit ?? "", metric?.reason ?? ""]);
+      rows.push([person.name || "", person.role || "", ...metricExportRow(KPI_LABELS[key] || key, key, metric)]);
     });
   });
   return rows;
+}
+
+function metricExportRow(label, key, metric) {
+  const publication = metric?.publication;
+  return [
+    label,
+    key,
+    metric?.displayValue ?? "",
+    publication?.calculatedValue ?? metric?.value ?? "",
+    publication ? (publication.officialValue ?? "") : "",
+    publication ? publicationStatusExport(publication.definitionStatus) : LEGACY_PUBLICATION_STATUS,
+    formatPeriod(publication?.calculationPeriod),
+    formatPeriod(publication?.capacityPeriod),
+    publication?.assumption || "",
+    metric?.unit ?? "",
+    metric?.reason ?? ""
+  ];
+}
+
+function publicationStatusExport(status) {
+  if (status === "requires_decision") return "نیازمند تأیید تعریف";
+  if (status === "unavailable") return "داده منبع موجود نیست";
+  if (status === "confirmed") return "مطابق تعریف سند";
+  return "وضعیت تعریف ثبت نشده";
+}
+
+function formatPeriod(period) {
+  if (!period?.from || !period?.to) return "";
+  return `${period.from} تا ${period.to}`;
 }
 
 function buildIssueRows(issues) {

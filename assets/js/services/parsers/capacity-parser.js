@@ -3,6 +3,7 @@ import { CAPACITY_COLUMN_ALIASES } from "../../config/capacity-column-mapping.js
 import { normalizeString, comparable, looseComparable } from "../normalization/string-normalizer.js";
 import { normalizeHours } from "../normalization/unit-normalizer.js";
 import { assertSpreadsheetBytes } from "../../utils/file-signature.js";
+import { capacityPeriodFromRows } from "../kpi-publication.js";
 
 function findSummaryRow(rows, canonical, { fuzzyTotal = false } = {}) {
   const aliases = CAPACITY_COLUMN_ALIASES[canonical] || [];
@@ -63,6 +64,7 @@ export async function parseCapacityWorkbook(file, arrayBuffer) {
     planned: plannedRow?.[0] || "",
     unplanned: unplannedRow?.[0] || ""
   };
+  const capacityPeriod = capacityPeriodFromRows(rows);
   const people = headers.slice(1).map((header, offset) => {
     const columnIndex = offset + 1;
     const merge = diagnostics.merges.find((m) => m.s.r === headerIndex && columnIndex >= m.s.c && columnIndex <= m.e.c);
@@ -89,11 +91,12 @@ export async function parseCapacityWorkbook(file, arrayBuffer) {
         planned: planned === null ? "" : "capacity-file",
         unplanned: unplanned === null ? "" : "capacity-file"
       },
-      unresolved: !normalizeString(displayName)
+      unresolved: !normalizeString(displayName),
+      capacityPeriod
     });
   });
   if (!people.some((person) => person.capacityName && !person.unresolved)) throw new Error("فایل ظرفیت ستون فردی قابل استفاده ندارد.");
-  const result = { fileName: file.name, signature, sheetNames: workbook.SheetNames, selectedSheet: sheetName, headers, originalHeaders, people, rawRows: rows, diagnostics };
+  const result = { fileName: file.name, signature, sheetNames: workbook.SheetNames, selectedSheet: sheetName, headers, originalHeaders, people, rawRows: rows, capacityPeriod, diagnostics };
   console.log?.({ fileName: file.name, sheetNames: workbook.SheetNames, people: people.length, formulas: diagnostics.formulas.length });
   console.groupEnd?.();
   return result;

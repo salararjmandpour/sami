@@ -2,6 +2,7 @@ import { KPI_CARD_ORDER, KPI_LABELS } from "../utils/constants.js";
 import { CALCULATION_VERSION } from "../utils/constants.js";
 import { escapeHtml } from "../utils/helpers.js";
 import { formatNumber } from "../utils/formatters.js";
+import { isLegacyPublicationSnapshot, publicationStatusLabel } from "../services/kpi-publication.js";
 
 export function renderFilters(reports, activeReport) {
   const target = document.getElementById("filters");
@@ -68,16 +69,22 @@ export function renderSourceActions(report) {
   </section>`;
 }
 
-export function renderKpiCards(metrics, drillDown = {}, report = null, activeFilters = {}) {
+export function renderKpiCards(metrics, drillDown = {}, report = null, activeFilters = {}, options = {}) {
   const target = document.getElementById("managementCards");
+  const note = document.getElementById("kpiPublicationNote");
+  const legacySnapshot = options.legacySnapshot || isLegacyPublicationSnapshot(report);
+  if (note) {
+    note.textContent = legacySnapshot
+      ? "این نسخه ذخیره‌شده فراداده تعریف KPI ندارد. اعداد کارت‌ها محاسبه فعلی از همان مسائل ذخیره‌شده هستند و مقدار رسمی ذخیره‌شده نیستند."
+      : "شاخص‌های «نیازمند تأیید تعریف» محاسبه شده‌اند، اما مقدار رسمی تأییدشده ندارند. توضیح هر کدام در بخش «توضیح تعریف» همان کارت است.";
+  }
   target.innerHTML = KPI_CARD_ORDER.map((key) => {
     const item = metrics?.[key] || { displayValue: "N/A", reason: "گزارشی موجود نیست." };
-    const accuracy = key === "estimationAccuracy" ? estimationAccuracyNote(drillDown[key], item) : "";
     return `<article class="kpi-card">
       <h3>${escapeHtml(KPI_LABELS[key] || key)}</h3>
       <div class="kpi-value">${escapeHtml(item.displayValue)}</div>
       ${item.reason ? `<div class="kpi-reason">${escapeHtml(readableNaReason(key, item.reason))}</div>` : ""}
-      ${accuracy}
+      ${metricPublicationHtml(item)}
       <button class="button button-secondary drill-button" data-drill="${escapeHtml(key)}" type="button">جزئیات</button>
     </article>`;
   }).join("");
@@ -126,8 +133,28 @@ function completeDrillDown(key, metric, detail = {}, report, activeFilters) {
     calculationVersion: detail.calculationVersion || "1.0.0",
     dataQualityWarnings: warnings,
     reason: displayValue === "N/A" ? readableNaReason(key, reason) : null,
+    publication: metric?.publication || null,
     ...detail
   };
+}
+
+export function metricPublicationHtml(item) {
+  const publication = item?.publication;
+  if (!publication) return "";
+  const status = publication.definitionStatus;
+  const badge = status === "requires_decision"
+    ? `<p class="kpi-status kpi-status-decision">${escapeHtml(publicationStatusLabel(status))}</p>`
+    : "";
+  const lines = [
+    `مقدار محاسبه‌شده: ${item.displayValue || "N/A"}`,
+    `مقدار رسمی تأییدشده: ${publication.officialValue == null ? "ندارد" : formatNumber(publication.officialValue, item.unit || "")}`,
+    `وضعیت تعریف: ${publicationStatusLabel(status)}`,
+    publication.calculationPeriod ? `بازه محاسبه: ${publication.calculationPeriod.from} تا ${publication.calculationPeriod.to}` : "",
+    publication.capacityPeriod ? `بازه ظرفیت: ${publication.capacityPeriod.from} تا ${publication.capacityPeriod.to} (${publication.capacityPeriod.dayCount} روز)` : "",
+    ...(publication.alternatives || []).map((alternative) => `${alternative.label}: ${formatNumber(alternative.value, alternative.unit || "")}`),
+    publication.assumption || ""
+  ].filter(Boolean);
+  return `${badge}<details class="kpi-help"><summary>توضیح تعریف</summary>${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</details>`;
 }
 
 function definitionFor(key) {
@@ -161,16 +188,6 @@ function readableNaReason(key, reason) {
   if (key === "reworkRate") return "Rework Rate قابل محاسبه نیست چون فیلد Rework Time وجود ندارد.";
   if (key === "wip") return "Average WIP قابل محاسبه نیست چون تاریخچه انتقال یا snapshot در دسترس نیست.";
   return reason || "دلیل N/A در داده موجود نیست.";
-}
-
-function estimationAccuracyNote(detail, metric) {
-  const estimated = detail?.numerator;
-  const logged = detail?.denominator;
-  const value = metric?.value;
-  const interpretation = value == null ? "" : value > 100 ? "بیشتر از ۱۰۰٪: زمان برآوردشده بیشتر از زمان ثبت‌شده است." : value < 100 ? "کمتر از ۱۰۰٪: زمان ثبت‌شده بیشتر از زمان برآوردشده است." : "نزدیک به ۱۰۰٪: زمان برآوردشده به زمان ثبت‌شده نزدیک است.";
-  return `<div class="kpi-reason">Estimation Accuracy = Estimated Hours / Work Logged Hours × 100</div>
-    <div class="kpi-reason">تخمین: ${formatNumber(estimated, "h")} | زمان ثبت‌شده: ${formatNumber(logged, "h")} | دقت: ${metric?.displayValue || "N/A"}</div>
-    <div class="kpi-reason">${escapeHtml(interpretation)}</div>`;
 }
 
 function countSeverities(items) {

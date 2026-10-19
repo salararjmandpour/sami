@@ -10,7 +10,7 @@ import { buildQualityReport, issue as qualityIssue } from "../services/data-qual
 import { buildReconciliation } from "../services/reconciliation-service.js";
 import { dbClearAll, dbGet, dbGetAll, dbPut, STORES } from "../services/indexeddb-service.js";
 import { exportJson } from "../services/export-service.js";
-import { deleteReport, getReport, hasReportApi, listReports, saveReport } from "../services/report-storage-service.js";
+import { deleteReport, getReport, hasReportApi, listReports, saveReport, storageSavedMessage } from "../services/report-storage-service.js";
 import { defaultWorkCategoryMapping, mergeWorkCategoryMapping } from "../services/work-log-category-service.js";
 import { getHolidays, saveHoliday } from "../services/holiday-service.js";
 import { workingHoursBetween } from "../services/holiday-service.js";
@@ -133,7 +133,7 @@ export class AppController {
   }
 
   async prepareMappings() {
-    const qaKeys = extractQaKeys(this.state.jira.qa.rows);
+    const qaKeys = extractQaKeys(this.state.jira.qa.rows, this.state.jira.qa.headers);
     this.state.normalizedIssues = normalizeJiraRows(this.state.jira.main.rows, this.state.jira.fieldMap, qaKeys, this.state.holidays, workingHoursBetween);
     await renderMappings(this.state);
     this.applyPendingMappingSnapshot();
@@ -153,7 +153,7 @@ export class AppController {
       workLogColumn: row.querySelector("[data-person-field='workLogColumn']").value,
       enabled: row.querySelector("[data-person-field='enabled']").checked
     }));
-    const qaKeys = extractQaKeys(this.state.jira.qa.rows);
+    const qaKeys = extractQaKeys(this.state.jira.qa.rows, this.state.jira.qa.headers);
     const normalizedIssues = normalizeJiraRows(this.state.jira.main.rows, this.state.fieldMap, qaKeys, this.state.holidays, workingHoursBetween);
     const dateFrom = document.getElementById("dateFrom").value;
     const dateTo = document.getElementById("dateTo").value;
@@ -195,13 +195,13 @@ export class AppController {
       reconciliation,
       kpiConfig: normalizeKpiConfig(this.state.kpi.kpis)
     });
-    await saveReport(report);
+    const saved = await saveReport(report);
     await dbPut("metricResults", { id: report.id, calculatedMetrics: report.calculatedMetrics, calculationVersion: report.calculationVersion });
     await dbPut("kpiConfigurations", { id: report.id, kpiConfig: report.kpiConfig });
     await dbPut("dataQualityIssues", { id: report.id, items: quality });
     this.openReport(report, { navigateToManagement: true });
     await this.refreshReports();
-    notify("گزارش تولید و ذخیره شد.");
+    notify(storageSavedMessage(saved), saved.fallback ? "error" : "info");
   }
 
   async refreshReports() {

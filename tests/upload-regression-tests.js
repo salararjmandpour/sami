@@ -138,6 +138,14 @@ test("Default people are not added when absent from the capacity file", () => {
   equal(mappings.some((mapping) => mapping.capacityName === "امید"), false);
 });
 
+test("Panel capacity names map to the Jira people in the same file", () => {
+  const mappings = buildInitialPersonMappings([{ id: "p1", capacityName: "مسلم" }, { id: "p2", capacityName: "کیانوش" }], [], []);
+  equal(mappings.find((mapping) => mapping.capacityName === "مسلم").jiraName, "Moslem Seydmohamadi");
+  equal(mappings.find((mapping) => mapping.capacityName === "مسلم").role, "developer");
+  equal(mappings.find((mapping) => mapping.capacityName === "کیانوش").jiraName, "Kianoush Vaziri");
+  equal(mappings.find((mapping) => mapping.capacityName === "کیانوش").role, "qa");
+});
+
 test("Default person mapping still enriches a matching capacity column", () => {
   const mappings = buildInitialPersonMappings([{ id: "p1", capacityName: "امید" }], [], []);
   equal(mappings.length, 1);

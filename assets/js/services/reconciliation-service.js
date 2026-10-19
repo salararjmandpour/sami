@@ -430,7 +430,7 @@ function selectManagementWorkLogColumn(context) {
 }
 
 function sumPersonWork(issues, mapping) {
-  if (!mapping.workLogColumn) return 0;
+  if (!mapping.workLogColumn) return null;
   return sum(issues.map((issue) => normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], getMeta(issue, mapping.workLogColumn)).hours || 0));
 }
 

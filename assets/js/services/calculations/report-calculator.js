@@ -10,6 +10,7 @@ import { normalizePossibleExcelHours } from "../normalization/unit-normalizer.js
 import { buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown } from "../work-log-category-service.js";
 import { hasReachedInProgress, startDetectionSource } from "../normalization/status-normalizer.js";
 import { distinctIssues } from "./issue-identity.js";
+import { annotateManagementMetrics, annotatePersonMetrics } from "../kpi-publication.js";
 
 function workMix(issues) {
   const byPlan = { planned: 0, unplanned: 0, carry_over: 0 };
@@ -26,6 +27,11 @@ function workMix(issues) {
 
 function issueCountMetric(issues) {
   return metric(distinctIssues(issues).length);
+}
+
+function sumPresent(values) {
+  const present = values.filter((value) => Number.isFinite(value));
+  return present.length ? sum(present) : null;
 }
 
 function issueKeys(issues) {
@@ -98,8 +104,12 @@ function capacityDebug(capacityRecord) {
 export function calculateManagementMetrics(issues, capacityPeople, mappings, workCategoryMapping) {
   const mix = workMix(issues);
   const plannedUnplanned = distinctIssues(issues).filter((issue) => ["planned", "unplanned"].includes(issue.planType));
-  const workload = sum(plannedUnplanned.map((issue) => (issue.devEstimate || 0) + (issue.testEstimate || 0)));
-  const capacity = totalUniqueCapacity(capacityPeople, mappings);
+  const devMappings = mappings.filter((mapping) => mapping.enabled !== false && mapping.role !== "qa");
+  const qaMappings = mappings.filter((mapping) => mapping.enabled !== false && mapping.role === "qa");
+  const devWorkload = sum(plannedUnplanned.map((issue) => issue.devEstimate || 0));
+  const qaWorkload = sum(distinctIssues(issues).filter((issue) => ["planned", "unplanned", "carry_over"].includes(issue.planType)).map((issue) => issue.testEstimate || 0));
+  const devCapacity = totalUniqueCapacity(capacityPeople, devMappings);
+  const qaCapacity = totalUniqueCapacity(capacityPeople, qaMappings);
   const totalPlannedCapacity = totalUniqueCapacityField(capacityPeople, mappings, "plannedCapacity");
   const totalUnplannedCapacity = totalUniqueCapacityField(capacityPeople, mappings, "unplannedCapacity");
   const qa = qaMetrics(issues);
@@ -121,10 +131,11 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
   const completedWithStoryPoints = issues.filter((issue) => issue.statusCanonical === "done" && Number.isFinite(issue.storyPoints));
   const averageStorySize = completedWithStoryPoints.length ? sum(completedWithStoryPoints.map((issue) => issue.storyPoints)) / completedWithStoryPoints.length : null;
   console.group?.("KPI Calculations");
-  console.log?.({ issueCount: issues.length, workload, capacity, estimated, workLogged, productiveWorkLogged });
+  console.log?.({ issueCount: issues.length, devWorkload, qaWorkload, devCapacity, qaCapacity, estimated, workLogged, productiveWorkLogged });
   console.groupEnd?.();
-  return {
-    capacityUtilization: metric(capacityUtilization(workload, capacity), "%", "ظرفیت موجود نیست."),
+  return annotateManagementMetrics({
+    capacityUtilization: metric(capacityUtilization(devWorkload, devCapacity), "%", "ظرفیت توسعه موجود نیست.", { workloadHours: devWorkload, capacityHours: devCapacity }),
+    capacityUtilizationQa: metric(capacityUtilization(qaWorkload, qaCapacity), "%", "ظرفیت QA موجود نیست.", { workloadHours: qaWorkload, capacityHours: qaCapacity }),
     totalPlannedCapacity: metric(totalPlannedCapacity, "h"),
     totalUnplannedCapacity: metric(totalUnplannedCapacity, "h"),
     totalPlannedIssueCount: issueCountMetric(plannedIssues),
@@ -137,8 +148,8 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
     unplannedProductiveWork: metric(unplannedProductiveWork, "h"),
     plannedCapacityUtilization: metric(capacityUtilization(plannedProductiveWork, totalPlannedCapacity), "%"),
     unplannedCapacityUtilization: metric(capacityUtilization(unplannedProductiveWork, totalUnplannedCapacity), "%"),
-    plannedWork: metric(mix.planned, "h"),
-    unplannedWork: metric(mix.unplanned, "h"),
+    plannedWork: metric(mix.plannedPercent, "%", "", { hours: mix.planned }),
+    unplannedWork: metric(mix.unplannedPercent, "%", "", { hours: mix.unplanned }),
     carryOver: metric(mix.carry_over, "h"),
     deliveryRateDevelop: metric(deliveryRateDevelop(issues), "%"),
     deliveryRate: metric(deliveryRate(issues), "%"),
@@ -157,7 +168,7 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
     nonProductiveWorkLogged: metric(workLogBreakdown.totals.nonProductiveWorkLoggedHours, "h"),
     leadTime: metric(average(distinctIssues(issues).map((issue) => issue.leadTimeHours)), "h"),
     cycleTime: metric(average(distinctIssues(issues).map((issue) => issue.cycleTimeHours)), "h"),
-    blockedTime: metric(sum(distinctIssues(issues).map((issue) => issue.blockedHours || 0)), "h"),
+    blockedTime: metric(sumPresent(distinctIssues(issues).map((issue) => issue.blockedHours)), "h", "ستون زمان بلاک در فایل Jira مقداری ندارد."),
     estimationAccuracy: metric(estimationAccuracy(productiveEstimated, productiveWorkLogged), "%", "Productive Work Logged صفر یا خالی است.", {
       productiveEstimatedHours: productiveEstimated,
       productiveWorkLoggedHours: productiveWorkLogged,
@@ -198,11 +209,11 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
         excludedNonProductiveIssueKeys: [...new Set((workLogBreakdown.rows || []).filter((row) => row.planType === "unplanned" && row.workCategory !== "productive").map((row) => row.issueKey))]
       }
     },
-    totalCapacity: capacity,
+    totalCapacity: devCapacity + qaCapacity,
     totalWorkLogged: workLogged,
     productiveEstimatedHours: productiveEstimated,
     workLogBreakdown
-  };
+  }, issues, capacityPeople);
 }
 
 export function calculatePersonDashboards(issues, capacityPeople, mappings, workCategoryMapping) {
@@ -223,6 +234,8 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
     const workloadForCapacity = role === "qa" ? planned + unplanned + carry : planned + unplanned;
     const workLogBreakdown = buildPersonWorkLogBreakdown(issues, mapping, workCategoryMapping);
     const relatedWorkLogBreakdown = buildPersonWorkLogBreakdown(related, mapping, workCategoryMapping);
+    const missingWorkLogReason = "ستون Work Log این فرد در فایل Jira وجود ندارد؛ این مقدار ساعت ثبت‌شده نیست.";
+    const loggedMetric = (value) => workLogBreakdown.sourceMissing ? metric(null, "h", missingWorkLogReason) : metric(value, "h");
     const plannedIssues = distinctIssues(related.filter((issue) => issue.planType === "planned"));
     const unplannedIssues = distinctIssues(related.filter((issue) => issue.planType === "unplanned"));
     const startedPlanned = startedIssues(plannedIssues);
@@ -292,7 +305,7 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
           loggedIssueKeys: carryOverLoggedRows.map((row) => row.issueKey)
         }
       },
-      metrics: {
+      metrics: annotatePersonMetrics({
         availableCapacity: metric(capacity, "h"),
         totalCapacity: metric(capacity, "h"),
         plannedCapacity: metric(plannedCapacity, "h"),
@@ -305,7 +318,7 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
         unplannedProductiveWork: metric(unplannedProductiveWork, "h"),
         plannedCapacityUtilization: metric(capacityUtilization(plannedProductiveWork, plannedCapacity), "%"),
         unplannedCapacityUtilization: metric(capacityUtilization(unplannedProductiveWork, unplannedCapacity), "%"),
-        carryOverWorkLogged: metric(role === "developer" ? carryOverWorkLogged : null, "h"),
+        carryOverWorkLogged: workLogBreakdown.sourceMissing ? metric(null, "h", missingWorkLogReason) : metric(role === "developer" ? carryOverWorkLogged : null, "h"),
         plannedWork: metric(planned, "h"),
         unplannedWork: metric(unplanned, "h"),
         carryOver: metric(carry, "h"),
@@ -316,16 +329,16 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
         qaReturnCount: metric(qa.returned),
         qaReturnRate: metric(qa.qaReturnRate, "%"),
         firstPassRate: metric(qa.firstPassRate, "%"),
-        workLogged: metric(workLogged, "h"),
-        rawWorkLogged: metric(workLogBreakdown.totals.rawWorkLoggedHours, "h"),
-        productiveWorkLogged: metric(workLogBreakdown.totals.productiveWorkLoggedHours, "h"),
-        blockWorkLogged: metric(workLogBreakdown.totals.blockWorkLoggedHours, "h"),
-        meetingWorkLogged: metric(workLogBreakdown.totals.meetingWorkLoggedHours, "h"),
-        technicalWorkLogged: metric(workLogBreakdown.totals.technicalWorkLoggedHours, "h"),
-        versionWorkLogged: metric(workLogBreakdown.totals.versionWorkLoggedHours, "h"),
-        technicalVersionWorkLogged: metric(workLogBreakdown.totals.technicalVersionWorkLoggedHours, "h"),
-        nonProductiveWorkLogged: metric(workLogBreakdown.totals.nonProductiveWorkLoggedHours, "h"),
-        estimationAccuracy: metric(estimationAccuracy(productiveEstimated, workLogBreakdown.totals.productiveWorkLoggedHours), "%", "Productive Work Logged صفر یا خالی است.", {
+        workLogged: loggedMetric(workLogged),
+        rawWorkLogged: loggedMetric(workLogBreakdown.totals.rawWorkLoggedHours),
+        productiveWorkLogged: loggedMetric(workLogBreakdown.totals.productiveWorkLoggedHours),
+        blockWorkLogged: loggedMetric(workLogBreakdown.totals.blockWorkLoggedHours),
+        meetingWorkLogged: loggedMetric(workLogBreakdown.totals.meetingWorkLoggedHours),
+        technicalWorkLogged: loggedMetric(workLogBreakdown.totals.technicalWorkLoggedHours),
+        versionWorkLogged: loggedMetric(workLogBreakdown.totals.versionWorkLoggedHours),
+        technicalVersionWorkLogged: loggedMetric(workLogBreakdown.totals.technicalVersionWorkLoggedHours),
+        nonProductiveWorkLogged: loggedMetric(workLogBreakdown.totals.nonProductiveWorkLoggedHours),
+        estimationAccuracy: metric(estimationAccuracy(productiveEstimated, workLogBreakdown.totals.productiveWorkLoggedHours), "%", workLogBreakdown.sourceMissing ? missingWorkLogReason : "Productive Work Logged صفر یا خالی است.", {
           productiveEstimatedHours: productiveEstimated,
           productiveWorkLoggedHours: workLogBreakdown.totals.productiveWorkLoggedHours,
           rawEstimatedHours: estimated,
@@ -334,10 +347,10 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
         }),
         leadTime: metric(average(related.map((i) => i.leadTimeHours)), "h"),
         cycleTime: metric(average(related.map((i) => i.cycleTimeHours)), "h"),
-        blockedTime: metric(sum(related.map((i) => i.blockedHours || 0)), "h"),
+        blockedTime: metric(sumPresent(related.map((issue) => issue.blockedHours)), "h", "ستون زمان بلاک در فایل Jira مقداری ندارد."),
         hotfixCount: metric(hotfixCount(related)),
         bugfixCount: metric(bugfixCount(related))
-      }
+      }, { role, issues: relatedIssues })
     };
   });
 }

@@ -19,7 +19,10 @@ export function renderReconciliation(reconciliation) {
     <h3>Work Log Category Reconciliation</h3>
     ${table(reconciliation.workLogCategoryReconciliation?.rows || [])}
     <h3>Person Work Log Breakdown</h3>
-    ${table((reconciliation.workLogCategoryReconciliation?.personBreakdowns || []).map((row) => ({ person: row.person, raw: row.totals.rawWorkLoggedHours, productive: row.totals.productiveWorkLoggedHours, block: row.totals.blockWorkLoggedHours, meeting: row.totals.meetingWorkLoggedHours, technical: row.totals.technicalWorkLoggedHours, version: row.totals.versionWorkLoggedHours, technicalVersion: row.totals.technicalVersionWorkLoggedHours, nonProductive: row.totals.nonProductiveWorkLoggedHours, reconciliationDifference: row.totals.reconciliationDifference })))}
+    ${table((reconciliation.workLogCategoryReconciliation?.personBreakdowns || []).map((row) => {
+      const hours = (value) => row.sourceMissing ? "N/A" : value;
+      return { person: row.person, raw: hours(row.totals.rawWorkLoggedHours), productive: hours(row.totals.productiveWorkLoggedHours), block: hours(row.totals.blockWorkLoggedHours), meeting: hours(row.totals.meetingWorkLoggedHours), technical: hours(row.totals.technicalWorkLoggedHours), version: hours(row.totals.versionWorkLoggedHours), technicalVersion: hours(row.totals.technicalVersionWorkLoggedHours), nonProductive: hours(row.totals.nonProductiveWorkLoggedHours), reconciliationDifference: hours(row.totals.reconciliationDifference) };
+    }))}
     <h3>Work Log Breakdown Table</h3>
     <div class="action-row">
       <label>فیلتر دسته<select id="workLogCategoryFilter"><option value="">همه</option><option value="productive">Productive</option><option value="block">Block</option><option value="meeting">Meeting</option><option value="technical">Technical</option><option value="version">Version</option></select></label>

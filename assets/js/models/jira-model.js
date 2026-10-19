@@ -45,12 +45,21 @@ export function normalizeJiraRows(rows, fieldMap, qaKeys, holidays, workingHours
   }).filter((row) => row.issueKey);
 }
 
-export function extractQaKeys(qaRows) {
+const ISSUE_KEY = /^[A-Za-z][A-Za-z0-9]+-\d+$/;
+
+export function extractQaKeys(qaRows, headers = []) {
   const keys = new Set();
+  const add = (value) => {
+    const key = normalizeString(value);
+    if (ISSUE_KEY.test(key)) keys.add(key);
+  };
+  const firstHeader = headers[0];
+  add(firstHeader);
+  const namedKey = headers.find((header) => ["key", "issue key", "issuekey"].includes(comparable(header)));
   qaRows.forEach((row) => {
-    const firstValue = Object.values(row)[0];
-    const key = normalizeString(row.Key || row.key || firstValue);
-    if (key) keys.add(key);
+    if (namedKey) add(row[namedKey]);
+    else if (firstHeader) add(row[firstHeader]);
+    else add(row.Key || row.key);
   });
   return keys;
 }

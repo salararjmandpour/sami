@@ -9,9 +9,11 @@ import { calculateManagementMetrics, calculatePersonDashboards } from "../servic
 import { buildReconciliation } from "../services/reconciliation-service.js";
 import { exportCsv, exportDataQualityExcel, exportJson, exportManagementExcel, exportReportExcel, exportScrumExcel } from "../services/export-service.js";
 import { dbPut } from "../services/indexeddb-service.js";
-import { getReport, saveReport } from "../services/report-storage-service.js";
+import { getReport, saveReport, storageSavedMessage } from "../services/report-storage-service.js";
 import { comparable } from "../services/normalization/string-normalizer.js";
 import { CALCULATION_VERSION } from "../utils/constants.js";
+import { notify } from "../views/notification-view.js";
+import { isLegacyPublicationSnapshot } from "../services/kpi-publication.js";
 
 export function renderReport(report, reports, onOpenReport = () => {}) {
   if (!report) return;
@@ -23,7 +25,8 @@ export function renderReport(report, reports, onOpenReport = () => {}) {
   document.getElementById("recalculateReportBtn")?.addEventListener("click", async () => {
     if (!confirm(`گزارش با نسخه ${CALCULATION_VERSION} دوباره محاسبه شود؟ گزارش قبلی تغییر نمی‌کند.`)) return;
     const recalculated = recalculateReportCopy(report);
-    await saveReport(recalculated);
+    const saved = await saveReport(recalculated);
+    notify(storageSavedMessage(saved), saved.fallback ? "error" : "info");
     await dbPut("metricResults", { id: recalculated.id, calculatedMetrics: recalculated.calculatedMetrics, calculationVersion: recalculated.calculationVersion });
     onOpenReport(recalculated);
   });
@@ -40,7 +43,7 @@ export function renderReport(report, reports, onOpenReport = () => {}) {
   if (reportExcelButton) reportExcelButton.onclick = () => exportReportExcel(report);
 }
 
-function recalculateReportCopy(report) {
+export function recalculateReportCopy(report) {
   const management = calculateManagementMetrics(report.normalizedData.issues, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping);
   const people = calculatePersonDashboards(report.normalizedData.issues, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping);
   const calculatedMetrics = { management, people };
@@ -84,7 +87,7 @@ function renderFilteredViews(report) {
   });
   const filteredReport = { ...report, calculatedMetrics, normalizedData: { ...report.normalizedData, issues: filtered }, dataQuality: filteredQuality, reconciliation: filteredReconciliation };
   attachIssueWorkLogBreakdown(filtered, calculatedMetrics.management.workLogBreakdown);
-  renderKpiCards(calculatedMetrics.management, filteredReconciliation.drillDown || {}, filteredReport, filters);
+  renderKpiCards(calculatedMetrics.management, filteredReconciliation.drillDown || {}, filteredReport, filters, { legacySnapshot: isLegacyPublicationSnapshot(report) });
   renderScrumDashboards(calculatedMetrics.people);
   renderQuality(filteredQuality);
   renderCharts(filteredReport);

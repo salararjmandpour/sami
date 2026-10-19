@@ -1,5 +1,6 @@
 import { escapeHtml } from "../utils/helpers.js";
 import { KPI_LABELS } from "../utils/constants.js";
+import { metricPublicationHtml } from "./management-view.js";
 
 const PERSON_KEYS = ["totalCapacity", "plannedCapacity", "unplannedCapacity", "plannedIssueCount", "startedPlannedIssueCount", "unplannedIssueCount", "startedUnplannedIssueCount", "plannedProductiveWork", "unplannedProductiveWork", "plannedCapacityUtilization", "unplannedCapacityUtilization", "carryOverWorkLogged", "productiveWorkLogged", "nonProductiveWorkLogged", "availableCapacity", "plannedWork", "unplannedWork", "carryOver", "capacityUtilization", "deliveryRateDevelop", "deliveryRate", "submittedToQa", "qaReturnCount", "qaReturnRate", "firstPassRate", "rawWorkLogged", "blockWorkLogged", "meetingWorkLogged", "technicalVersionWorkLogged", "estimationAccuracy", "leadTime", "cycleTime", "blockedTime", "hotfixCount", "bugfixCount"];
 const PERSON_DRILL_KEYS = {
@@ -18,7 +19,7 @@ export function renderScrumDashboards(people) {
   }
   target.innerHTML = people.map((person, personIndex) => `<section class="person-dashboard panel">
     <h3>${escapeHtml(person.name)} <span class="badge">${escapeHtml(person.role)}</span></h3>
-    <div class="kpi-grid">${personKeysForRole(person.role).map((key) => `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(person.metrics[key]?.displayValue || "N/A")}</div>${PERSON_DRILL_KEYS[key] && person.planningDrillDown?.[PERSON_DRILL_KEYS[key]] ? `<button class="button button-secondary drill-button" data-person-index="${personIndex}" data-person-drill="${escapeHtml(key)}" type="button">جزئیات</button>` : ""}</article>`).join("")}</div>
+    <div class="kpi-grid">${personKeysForRole(person.role).map((key) => `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(person.metrics[key]?.displayValue || "N/A")}</div>${metricPublicationHtml(person.metrics[key])}${PERSON_DRILL_KEYS[key] && person.planningDrillDown?.[PERSON_DRILL_KEYS[key]] ? `<button class="button button-secondary drill-button" data-person-index="${personIndex}" data-person-drill="${escapeHtml(key)}" type="button">جزئیات</button>` : ""}</article>`).join("")}</div>
   </section>`).join("");
   target.querySelectorAll("[data-person-drill]").forEach((button) => button.addEventListener("click", () => {
     const person = people[Number(button.dataset.personIndex)];

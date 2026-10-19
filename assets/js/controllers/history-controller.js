@@ -1,6 +1,6 @@
 import { dbPut } from "../services/indexeddb-service.js";
 import { exportReportExcel } from "../services/export-service.js";
-import { deleteReport, getReport, listReports } from "../services/report-storage-service.js";
+import { consumeStorageNotice, deleteReport, getReport, listReports } from "../services/report-storage-service.js";
 import { renderHistory } from "../views/history-view.js";
 import { notify } from "../views/notification-view.js";
 
@@ -26,9 +26,14 @@ export function wireHistory({ onOpen, onRefresh, onDuplicate }) {
     const deleteId = event.target.dataset.deleteReport;
     const duplicateId = event.target.dataset.duplicateReport;
     const exportId = event.target.dataset.exportReport;
-    if (openId) onOpen(await getReport(openId));
+    if (openId) {
+      const report = await getReport(openId);
+      notifyStorageFallback();
+      onOpen(report);
+    }
     if (exportId) {
       const report = await getReport(exportId);
+      notifyStorageFallback();
       if (!report) return notify("گزارش برای خروجی Excel پیدا نشد.", "error");
       exportReportExcel(report);
     }
@@ -43,6 +48,7 @@ export function wireHistory({ onOpen, onRefresh, onDuplicate }) {
     }
     if (duplicateId) {
       const source = await getReport(duplicateId);
+      notifyStorageFallback();
       if (!source) return notify("گزارش برای کپی تنظیمات پیدا نشد.", "error");
       const settings = duplicatedSettingsFromReport(source);
       await dbPut("settings", { id: "last-duplicated-config", ...settings });
@@ -54,6 +60,18 @@ export function wireHistory({ onOpen, onRefresh, onDuplicate }) {
 
 export async function refreshHistory() {
   const reports = await loadReports();
+  notifyStorageFallback();
   renderHistory(reports);
   return reports;
+}
+
+function notifyStorageFallback() {
+  const notice = consumeStorageNotice();
+  if (!notice?.fallback) return;
+  const messages = {
+    list: "فهرست PostgreSQL خوانده نشد. فهرست نشان داده‌شده از مرورگر است.",
+    get: "گزارش از PostgreSQL خوانده نشد. نسخه مرورگر نشان داده می‌شود.",
+    save: "ذخیره در PostgreSQL ناموفق بود. گزارش فقط در مرورگر ذخیره شد."
+  };
+  notify(messages[notice.operation] || "PostgreSQL در دسترس نیست. داده نشان داده‌شده از مرورگر است.", "error");
 }

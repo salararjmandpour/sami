@@ -133,6 +133,17 @@ test("Work logs: individual categorization uses mapped person column", () => {
   close(b.totals.meetingWorkLoggedHours, 2);
 });
 
+test("Work logs: a person without a work-log column does not receive the team total", () => {
+  const breakdown = buildPersonWorkLogBreakdown([issue({ raw: 9 })], { jiraName: "Ahad", workLogColumn: "", enabled: true }, mapping);
+  equal(breakdown.totals.rawWorkLoggedHours, 0);
+  equal(breakdown.sourceMissing, true);
+  equal(workLogBreakdownForExport(breakdown).rawHours, null);
+  const person = calculatePersonDashboards([issue({ issueKey: "A-1", raw: 9, assignee: "Ahad" })], [], [{ jiraName: "Ahad", role: "developer", workLogColumn: "", enabled: true }], mapping)[0];
+  equal(person.metrics.rawWorkLogged.value, null);
+  equal(person.metrics.rawWorkLogged.displayValue, "N/A");
+  ok(person.metrics.rawWorkLogged.reason.includes("Work Log"));
+});
+
 test("Work logs: another person's log is not assigned to current person", () => {
   const b = buildPersonWorkLogBreakdown([issue({ ali: 2, sara: 5 })], { jiraName: "Ali", workLogColumn: "AliLog", enabled: true }, mapping);
   close(b.totals.rawWorkLoggedHours, 2);

@@ -61,6 +61,15 @@ export function buildManagementWorkLogBreakdown(issues, personMappings = [], fie
 
 export function buildPersonWorkLogBreakdown(issues, mapping, categoryMapping = WORK_CATEGORY_MAPPING) {
   const column = mapping?.workLogColumn || "";
+  if (!column) {
+    return finalizeBreakdown([], {
+      sourceColumn: "",
+      sourceMissing: true,
+      scope: "person",
+      person: mapping?.jiraName || "",
+      role: mapping?.role || ""
+    });
+  }
   const rows = issues.map((issue) => issueBreakdown(issue, column, categoryMapping)).filter((row) => row.rawWorkLoggedHours !== 0);
   return finalizeBreakdown(rows, { sourceColumn: column, scope: "person", person: mapping?.jiraName || "", role: mapping?.role || "" });
 }
@@ -89,6 +98,19 @@ export function buildWorkLogQualityWarnings(breakdown) {
 
 export function workLogBreakdownForExport(breakdown) {
   const totals = breakdown?.totals || emptyTotals();
+  if (breakdown?.sourceMissing) {
+    return {
+      rawHours: null,
+      productiveHours: null,
+      blockHours: null,
+      meetingHours: null,
+      technicalHours: null,
+      versionHours: null,
+      technicalVersionHours: null,
+      nonProductiveHours: null,
+      reconciliationDifference: null
+    };
+  }
   return {
     rawHours: totals.rawWorkLoggedHours,
     productiveHours: totals.productiveWorkLoggedHours,

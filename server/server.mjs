@@ -56,7 +56,12 @@ async function ensureSchema() {
 
 async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/health") {
-    sendJson(response, 200, { ok: true, storage: "postgres" });
+    try {
+      await pool.query("SELECT 1");
+      sendJson(response, 200, { ok: true, storage: "postgres", database: "connected" });
+    } catch {
+      sendJson(response, 503, { ok: false, storage: "postgres", database: "unavailable" });
+    }
     return;
   }
 

@@ -1,19 +1,40 @@
 import { dbDelete, dbGet, dbGetAll, dbPut } from "./indexeddb-service.js";
 
 let apiStatus = null;
+let storageNotice = null;
 
-export async function saveReport(report) {
+export function postgresApiIsConnected(payload) {
+  return payload?.ok === true && payload?.storage === "postgres" && payload?.database === "connected";
+}
+
+export function storageSavedMessage(result) {
+  if (result?.storage === "postgres" && !result?.fallback) return "گزارش در PostgreSQL ذخیره شد.";
+  if (result?.fallback) return "ذخیره در PostgreSQL ناموفق بود. گزارش فقط در مرورگر ذخیره شد، نه در پایگاه داده.";
+  return "گزارش در مرورگر ذخیره شد. PostgreSQL برای این ذخیره استفاده نشد.";
+}
+
+export function consumeStorageNotice() {
+  const notice = storageNotice;
+  storageNotice = null;
+  return notice;
+}
+
+export async function saveReport(report, io = {}) {
+  const put = io.put || ((item) => dbPut("reports", item));
   if (await hasReportApi()) {
     try {
       await apiJson("/api/reports", { method: "POST", body: JSON.stringify({ report }) });
-      return report;
+      return { report, storage: "postgres", fallback: false };
     } catch (error) {
       console.warn("PostgreSQL report save failed; saving the report in IndexedDB instead.", error);
       apiStatus = false;
+      storageNotice = { storage: "indexeddb", fallback: true, operation: "save" };
+      await put(report);
+      return { report, storage: "indexeddb", fallback: true };
     }
   }
-  await dbPut("reports", report);
-  return report;
+  await put(report);
+  return { report, storage: "indexeddb", fallback: false };
 }
 
 export async function listReports() {
@@ -24,6 +45,7 @@ export async function listReports() {
     } catch (error) {
       console.warn("PostgreSQL report list failed; using IndexedDB.", error);
       apiStatus = false;
+      storageNotice = { storage: "indexeddb", fallback: true, operation: "list" };
     }
   }
   return normalizeReportList(await dbGetAll("reports"));
@@ -39,6 +61,7 @@ export async function getReport(id) {
     } catch (error) {
       console.warn("PostgreSQL report retrieval failed; using IndexedDB.", error);
       apiStatus = false;
+      storageNotice = { storage: "indexeddb", fallback: true, operation: "get" };
     }
   }
   return dbGet("reports", id);
@@ -61,7 +84,7 @@ export async function hasReportApi() {
   }
   try {
     const payload = await apiJson("/api/health", {}, 1200);
-    apiStatus = payload?.storage === "postgres";
+    apiStatus = postgresApiIsConnected(payload);
   } catch {
     apiStatus = false;
   }

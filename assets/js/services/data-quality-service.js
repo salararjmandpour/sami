@@ -33,6 +33,13 @@ export function buildQualityReport({ jira, fieldMap, capacity, issues, personMap
     if ([person.availableCapacity, person.plannedCapacity, person.unplannedCapacity].some((value) => value !== null && value !== undefined && (!Number.isFinite(value) || value < 0))) items.push(issue("warning", "Invalid or negative capacity", `${person.capacityName}: capacity contains invalid or negative values`));
     if (Number.isFinite(person.availableCapacity) && Number.isFinite(person.plannedCapacity) && Number.isFinite(person.unplannedCapacity) && Math.abs(person.plannedCapacity + person.unplannedCapacity - person.availableCapacity) > 0.01) items.push(issue("warning", "Planned Capacity plus Unplanned Capacity differs materially from Total Capacity", `${person.capacityName}: planned + unplanned = ${person.plannedCapacity + person.unplannedCapacity}, total = ${person.availableCapacity}`));
   });
+  if (fieldMap?.created && !(issues || []).some((row) => row.created)) items.push(issue("warning", "Missing Created Date", "ستون تاریخ ایجاد نگاشت شده است، اما هیچ مسئله‌ای تاریخ ایجاد ندارد. Lead Time قابل محاسبه نیست."));
+  if (fieldMap?.doneDate && !(issues || []).some((row) => row.doneDate)) items.push(issue("warning", "Missing Done Date", "ستون تاریخ Done نگاشت شده است، اما هیچ مسئله‌ای تاریخ Done ندارد. Lead Time و Cycle Time قابل محاسبه نیستند."));
+  if (fieldMap?.blockedTime && !(issues || []).some((row) => Number.isFinite(row.blockedHours))) items.push(issue("warning", "Missing Blocked Time", "ستون زمان بلاک نگاشت شده است، اما هیچ مقداری ندارد. زمان بلاک N/A است."));
+  if (fieldMap?.issueType && !(issues || []).some((row) => row.issueType)) items.push(issue("info", "Missing Issue Type", "ستون نوع مسئله خالی است. شمارش Hotfix و Bug فقط از برچسب‌ها ممکن است."));
+  personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && !mapping.workLogColumn).forEach((mapping) => {
+    items.push(issue("warning", "Missing person work-log column", `${mapping.jiraName}: ستون Work Log برای این فرد در فایل Jira وجود ندارد. زمان ثبت‌شده فردی صفر می‌ماند و زمان کل تیم تقسیم نمی‌شود.`));
+  });
   const hasPersonWorkColumns = personMappings.some((mapping) => mapping.workLogColumn);
   if (!hasPersonWorkColumns && (issues || []).some((row) => row.planType === "carry_over" && row.workLogged > 0)) {
     items.push(issue("warning", "Carry-over issue has issue-level Work Logged but no per-person work-log allocation", "Developer carry-over logged time cannot be allocated without mapped person work-log columns."));
