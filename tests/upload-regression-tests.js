@@ -146,6 +146,20 @@ test("Panel capacity names map to the Jira people in the same file", () => {
   equal(mappings.find((mapping) => mapping.capacityName === "کیانوش").role, "qa");
 });
 
+test("A blank saved Jira name does not drop the capacity link or duplicate the person", () => {
+  const mappings = buildInitialPersonMappings(
+    [{ id: "capacity-col-3", capacityName: "احد" }, { id: "capacity-col-7", capacityName: "علی" }],
+    [{ assignee: "Ahad Sheibani" }, { qaOwner: "Ali Bahrampour" }, { assignee: "Hadi Abedi" }],
+    [{ capacityName: "احد", jiraName: "", role: "developer", workLogColumn: "", enabled: true }]
+  );
+  const ahad = mappings.filter((mapping) => mapping.jiraName === "Ahad Sheibani");
+  equal(ahad.length, 1);
+  equal(ahad[0].capacityName, "احد");
+  equal(ahad[0].capacityId, "capacity-col-3");
+  equal(mappings.find((mapping) => mapping.capacityName === "علی").role, "qa");
+  equal(mappings.find((mapping) => mapping.jiraName === "Hadi Abedi").capacityName, "");
+});
+
 test("Default person mapping still enriches a matching capacity column", () => {
   const mappings = buildInitialPersonMappings([{ id: "p1", capacityName: "امید" }], [], []);
   equal(mappings.length, 1);

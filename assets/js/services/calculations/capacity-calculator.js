@@ -1,3 +1,4 @@
+import { DEFAULT_PERSON_MAPPING } from "../../config/person-mapping.js";
 import { comparable } from "../normalization/string-normalizer.js";
 import { ratio, sum } from "./time-calculator.js";
 
@@ -6,11 +7,9 @@ export function totalUniqueCapacity(capacityPeople, mappings) {
 }
 
 export function totalUniqueCapacityField(capacityPeople, mappings, field = "availableCapacity") {
-  const byName = new Map(capacityPeople.map((p) => [comparable(p.capacityName), p]));
-  const byId = new Map(capacityPeople.map((p) => [p.id, p]));
   const used = new Set();
   return mappings.filter((m) => m.enabled).reduce((total, mapping) => {
-    const person = byId.get(mapping.capacityId) || byName.get(comparable(mapping.capacityName));
+    const person = personCapacityRecord(capacityPeople, mapping);
     if (!person || used.has(person.id) || !Number.isFinite(person[field])) return total;
     used.add(person.id);
     return total + person[field];
@@ -26,12 +25,28 @@ export function personCapacity(capacityPeople, mapping) {
 }
 
 export function personCapacityField(capacityPeople, mapping, field = "availableCapacity") {
-  const person = capacityPeople.find((p) => p.id === mapping.capacityId || comparable(p.capacityName) === comparable(mapping.capacityName));
-  return person?.[field] ?? null;
+  return personCapacityRecord(capacityPeople, mapping)?.[field] ?? null;
 }
 
 export function personCapacityRecord(capacityPeople, mapping) {
-  return capacityPeople.find((p) => p.id === mapping.capacityId || comparable(p.capacityName) === comparable(mapping.capacityName)) || null;
+  const people = capacityPeople || [];
+  const explicitName = comparable(mapping?.capacityName);
+  if (explicitName) {
+    return people.find((person) => comparable(person.capacityName) === explicitName)
+      || people.find((person) => mapping?.capacityId && person.id === mapping.capacityId)
+      || null;
+  }
+  const byId = mapping?.capacityId ? people.find((person) => person.id === mapping.capacityId && !person.unresolved) : null;
+  if (byId) return byId;
+  const presetName = comparable(presetCapacityName(mapping?.jiraName));
+  if (!presetName) return null;
+  return people.find((person) => comparable(person.capacityName) === presetName) || null;
+}
+
+function presetCapacityName(jiraName) {
+  if (!comparable(jiraName)) return "";
+  const preset = DEFAULT_PERSON_MAPPING.find((item) => item.enabled !== false && comparable(item.jiraName) === comparable(jiraName) && comparable(item.capacityName));
+  return preset?.capacityName || "";
 }
 
 export function capacityByPersonMetrics(capacityPeople, mappings, issueGroups, includeCarryOverForQa = true) {

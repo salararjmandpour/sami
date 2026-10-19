@@ -1,5 +1,6 @@
 import { test, equal, close } from "./test-helpers.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
+import { totalUniqueCapacity } from "../assets/js/services/calculations/capacity-calculator.js";
 
 const issues = [
   { issueKeyComparable: "a", planType: "planned", statusCanonical: "done", devEstimate: 4, testEstimate: 2, workLogged: 5, labels: ["hotfix"], firstAutomationTest: "2026-01-01T00:00:00Z", qaReturned: false, leadTimeHours: 9, cycleTimeHours: 8, blockedHours: 1, assignee: "Dev A", qaOwner: "QA A", raw: { "Work A": 5 } },
@@ -71,4 +72,48 @@ test("Hotfix and bug counts use issue type as well as labels", () => {
   ], capacity, mappings);
   equal(metrics.hotfixCount.value, 1);
   equal(metrics.bugfixCount.value, 1);
+});
+
+const panelCapacity = [
+  { id: "capacity-col-1", capacityName: "مسلم", availableCapacity: 110.8, plannedCapacity: 80.64, unplannedCapacity: 10.08 },
+  { id: "capacity-col-3", capacityName: "احد", availableCapacity: 141.6, plannedCapacity: 113.28, unplannedCapacity: 14.16 },
+  { id: "capacity-col-7", capacityName: "علی", availableCapacity: 133.9, plannedCapacity: 107.12, unplannedCapacity: 13.39 },
+  { id: "capacity-col-9", capacityName: "ستون بدون نام 10", availableCapacity: null, unresolved: true },
+  { id: "zero", capacityName: "صفر", availableCapacity: 0, plannedCapacity: 0, unplannedCapacity: 0 }
+];
+const panelIssues = [
+  { issueKey: "A-1", assignee: "Ahad Sheibani", qaOwner: "Ali Bahrampour", planType: "planned", devEstimate: 21, testEstimate: 4, statusCanonical: "done", labels: [], raw: {} },
+  { issueKey: "M-1", assignee: "Moslem Seydmohamadi", planType: "planned", devEstimate: 5, testEstimate: 0, statusCanonical: "done", labels: [], raw: {} },
+  { issueKey: "H-1", assignee: "Hadi Abedi", planType: "planned", devEstimate: 3, testEstimate: 0, statusCanonical: "done", labels: [], raw: {} }
+];
+const panelMappings = [
+  { capacityId: "capacity-col-9", capacityName: "", jiraName: "Ahad Sheibani", role: "developer", workLogColumn: "", enabled: true },
+  { capacityId: "capacity-col-1", capacityName: "مسلم", jiraName: "Moslem Seydmohamadi", role: "developer", workLogColumn: "", enabled: true },
+  { capacityId: "capacity-col-7", capacityName: "علی", jiraName: "Ali Bahrampour", role: "qa", workLogColumn: "Work Today Ali", enabled: true },
+  { capacityName: "", jiraName: "Hadi Abedi", role: "developer", workLogColumn: "", enabled: true },
+  { capacityId: "zero", capacityName: "صفر", jiraName: "Zero Person", role: "developer", workLogColumn: "", enabled: true }
+];
+
+test("Scrum overall capacity keeps a mapped person when the row has no capacity name", () => {
+  const dashboards = calculatePersonDashboards(panelIssues, panelCapacity, panelMappings, {});
+  const ahad = dashboards.find((person) => person.name === "Ahad Sheibani");
+  const moslem = dashboards.find((person) => person.name === "Moslem Seydmohamadi");
+  const ali = dashboards.find((person) => person.name === "Ali Bahrampour");
+  const hadi = dashboards.find((person) => person.name === "Hadi Abedi");
+  const zero = dashboards.find((person) => person.name === "Zero Person");
+  equal(ahad.metrics.totalCapacity.value, 141.6);
+  equal(ahad.metrics.availableCapacity.value, 141.6);
+  equal(ahad.metrics.plannedCapacity.value, 113.28);
+  equal(ahad.metrics.totalCapacity.displayValue === "N/A", false);
+  equal(moslem.metrics.totalCapacity.value, 110.8);
+  equal(ali.metrics.totalCapacity.value, 133.9);
+  equal(ali.role, "qa");
+  equal(hadi.metrics.totalCapacity.value, null);
+  equal(hadi.metrics.totalCapacity.displayValue, "N/A");
+  equal(zero.metrics.totalCapacity.value, 0);
+  equal(zero.metrics.totalCapacity.displayValue === "N/A", false);
+  const devMappings = panelMappings.filter((mapping) => mapping.role !== "qa" && mapping.jiraName !== "Hadi Abedi" && mapping.jiraName !== "Zero Person");
+  const qaMappings = panelMappings.filter((mapping) => mapping.role === "qa");
+  close(totalUniqueCapacity(panelCapacity, devMappings), 252.4);
+  close(totalUniqueCapacity(panelCapacity, qaMappings), 133.9);
 });

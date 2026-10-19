@@ -2,6 +2,7 @@ import { test, equal, ok } from "./test-helpers.js";
 import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js";
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
 import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
+import { calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
 import { renderHistory } from "../assets/js/views/history-view.js";
 import { selectionTokensFromFiles } from "../assets/js/utils/upload-selection.js";
 import { buildDataQualityWorkbookSheets, buildManagementWorkbookSheets, buildReportWorkbookSheets, buildScrumWorkbookSheets } from "../assets/js/services/export-service.js";
@@ -116,6 +117,40 @@ test("Person dashboards expose new metric drill-down buttons", () => {
     ok(target.innerHTML.includes('data-person-drill="carryOverWorkLogged"'));
     equal(target.innerHTML.includes(">Carry Over</h3><div class=\"kpi-value\">99h"), false);
     equal(target.innerHTML.includes("carry_over"), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Scrum card and Excel export show Ahad's own capacity", () => {
+  const capacity = [
+    { id: "capacity-col-1", capacityName: "مسلم", availableCapacity: 110.8, plannedCapacity: 80.64, unplannedCapacity: 10.08 },
+    { id: "capacity-col-3", capacityName: "احد", availableCapacity: 141.6, plannedCapacity: 113.28, unplannedCapacity: 14.16 },
+    { id: "capacity-col-7", capacityName: "علی", availableCapacity: 133.9, plannedCapacity: 107.12, unplannedCapacity: 13.39 }
+  ];
+  const people = calculatePersonDashboards([
+    { issueKey: "A-1", assignee: "Ahad Sheibani", planType: "planned", devEstimate: 21, statusCanonical: "done", labels: [], raw: {} },
+    { issueKey: "M-1", assignee: "Moslem Seydmohamadi", planType: "planned", devEstimate: 5, statusCanonical: "done", labels: [], raw: {} }
+  ], capacity, [
+    { capacityName: "", jiraName: "Ahad Sheibani", role: "developer", enabled: true },
+    { capacityId: "capacity-col-1", capacityName: "مسلم", jiraName: "Moslem Seydmohamadi", role: "developer", enabled: true },
+    { capacityId: "capacity-col-7", capacityName: "علی", jiraName: "Ali Bahrampour", role: "qa", enabled: true }
+  ], {});
+  const ahad = people.find((person) => person.name === "Ahad Sheibani");
+  const cleanup = mountFixture(`<div id="scrumDashboards"></div>`);
+  try {
+    renderScrumDashboards(people);
+    const card = document.getElementById("scrumDashboards").innerHTML.split("Moslem Seydmohamadi")[0];
+    ok(card.includes(`Total Capacity</h3><div class="kpi-value">${ahad.metrics.totalCapacity.displayValue}`));
+    equal(ahad.metrics.totalCapacity.displayValue === "N/A", false);
+    const sheets = buildScrumWorkbookSheets({ calculatedMetrics: { people }, normalizedData: { issues: [] } });
+    const rows = sheets.find((sheet) => sheet.name === "People KPI").rows;
+    const ahadTotal = rows.find((row) => row[0] === "Ahad Sheibani" && row[3] === "totalCapacity");
+    const moslemTotal = rows.find((row) => row[0] === "Moslem Seydmohamadi" && row[3] === "totalCapacity");
+    const aliTotal = rows.find((row) => row[0] === "Ali Bahrampour" && row[3] === "totalCapacity");
+    equal(ahadTotal[5], 141.6);
+    equal(moslemTotal[5], 110.8);
+    equal(aliTotal[5], 133.9);
   } finally {
     cleanup();
   }
