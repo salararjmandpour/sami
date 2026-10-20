@@ -1,10 +1,9 @@
 import { test, equal, close, ok } from "./test-helpers.js";
 import { CALCULATION_VERSION } from "../assets/js/utils/constants.js";
-import { classifyIssue, buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown, buildWorkLogQualityWarnings, workLogBreakdownForExport } from "../assets/js/services/work-log-category-service.js";
+import { classifyIssue, buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown, buildWorkLogQualityWarnings, resolvePersonWorkLogColumn, workLogBreakdownForExport } from "../assets/js/services/work-log-category-service.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
 import { createReport } from "../assets/js/models/report-model.js";
 import { getIssueCsvRows } from "../assets/js/views/table-view.js";
-
 const mapping = {
   block: { labels: ["block", "بلاک"], titlePatterns: ["block", "بلاک"] },
   meeting: { labels: ["meeting", "جلسه"], titlePatterns: ["meeting", "جلسه"] },
@@ -27,6 +26,20 @@ function issue(overrides = {}) {
     statusCanonical: overrides.statusCanonical || "done",
     status: overrides.status || "Done",
     planType: overrides.planType || "planned"
+  };
+}
+
+function personLogIssue(overrides = {}) {
+  const hours = overrides.hours ?? 0;
+  const teamHours = overrides.teamHours ?? 40;
+  return {
+    ...issue(overrides),
+    workLogged: teamHours,
+    raw: {
+      "Σ Time Spent": teamHours,
+      "Work Logged Ali": hours,
+      "Fix Version/s": ""
+    }
   };
 }
 
@@ -148,6 +161,83 @@ test("Work logs: a missing personal column does not become zero planned work", (
   equal(person.metrics.unplannedCapacityUtilization.value, null);
   equal(person.metrics.plannedIssueCount.value, 1);
   equal(person.metrics.totalCapacity.value, 100);
+});
+
+test("Work logs: comparable column names still resolve to recorded hours", () => {
+  const rows = [personLogIssue({ issueKey: "C-1", hours: 6, assignee: "Ali Reza", planType: "planned" })];
+  equal(resolvePersonWorkLogColumn(rows, { jiraName: "Ali Reza", workLogColumn: "work logged ali" }), "Work Logged Ali");
+  const person = calculatePersonDashboards(
+    rows,
+    [{ id: "c1", capacityName: "Ali", availableCapacity: 40, plannedCapacity: 32, unplannedCapacity: 8 }],
+    [{ jiraName: "Ali Reza", capacityName: "Ali", capacityId: "c1", role: "developer", workLogColumn: "work logged ali", enabled: true }],
+    mapping
+  )[0];
+  equal(person.metrics.rawWorkLogged.value, 6);
+  equal(person.metrics.plannedProductiveWork.value, 6);
+  equal(person.metrics.plannedCapacityUtilization.value, 18.75);
+  equal(person.metrics.productiveWorkLogged.displayValue === "N/A", false);
+});
+
+test("Work logs: empty mapping auto-detects a personal column and does not use team total", () => {
+  const rows = [personLogIssue({ issueKey: "D-1", hours: 7, teamHours: 40, assignee: "Ali Reza", planType: "planned" })];
+  equal(resolvePersonWorkLogColumn(rows, { jiraName: "Ali Reza", workLogColumn: "" }), "Work Logged Ali");
+  const person = calculatePersonDashboards(
+    rows,
+    [{ id: "c1", capacityName: "Ali", availableCapacity: 40, plannedCapacity: 32, unplannedCapacity: 8 }],
+    [{ jiraName: "Ali Reza", capacityName: "Ali", capacityId: "c1", role: "developer", workLogColumn: "", enabled: true }],
+    mapping
+  )[0];
+  equal(person.workLogBreakdown.sourceMissing, undefined);
+  equal(person.metrics.rawWorkLogged.value, 7);
+  equal(person.metrics.rawWorkLogged.value === 40, false);
+  equal(person.metrics.plannedProductiveWork.value, 7);
+  equal(person.metrics.productiveWorkLogged.value, 7);
+  equal(person.metrics.nonProductiveWorkLogged.value, 0);
+});
+
+test("Screenshot regression: capacity and counts stay available when personal work logs are missing", () => {
+  const planned = Array.from({ length: 12 }, (_, index) => issue({
+    issueKey: `P-${index + 1}`,
+    raw: 5,
+    ali: "",
+    assignee: "Ghost Dev",
+    planType: "planned",
+    status: "In Progress",
+    statusCanonical: "in_progress",
+    firstInProgress: "2026-01-01"
+  }));
+  const unplanned = Array.from({ length: 13 }, (_, index) => issue({
+    issueKey: `U-${index + 1}`,
+    raw: 5,
+    ali: "",
+    assignee: "Ghost Dev",
+    planType: "unplanned",
+    status: "In Progress",
+    statusCanonical: "in_progress",
+    firstInProgress: "2026-01-01"
+  }));
+  const person = calculatePersonDashboards(
+    [...planned, ...unplanned],
+    [{ id: "g1", capacityName: "Ghost", availableCapacity: 110.8, plannedCapacity: 80.64, unplannedCapacity: 20.16 }],
+    [{ jiraName: "Ghost Dev", capacityName: "Ghost", capacityId: "g1", role: "developer", workLogColumn: "", enabled: true }],
+    mapping
+  )[0];
+  equal(person.metrics.totalCapacity.value, 110.8);
+  equal(person.metrics.plannedCapacity.value, 80.64);
+  equal(person.metrics.unplannedCapacity.value, 20.16);
+  equal(person.metrics.availableCapacity.value, 110.8);
+  equal(person.metrics.plannedIssueCount.value, 12);
+  equal(person.metrics.startedPlannedIssueCount.value, 12);
+  equal(person.metrics.unplannedIssueCount.value, 13);
+  equal(person.metrics.startedUnplannedIssueCount.value, 13);
+  equal(person.metrics.plannedProductiveWork.displayValue, "N/A");
+  equal(person.metrics.unplannedProductiveWork.displayValue, "N/A");
+  equal(person.metrics.plannedCapacityUtilization.displayValue, "N/A");
+  equal(person.metrics.unplannedCapacityUtilization.displayValue, "N/A");
+  equal(person.metrics.productiveWorkLogged.displayValue, "N/A");
+  equal(person.metrics.nonProductiveWorkLogged.displayValue, "N/A");
+  equal(person.metrics.carryOverWorkLogged.displayValue, "N/A");
+  ok(person.metrics.productiveWorkLogged.reason.includes("Work Log"));
 });
 
 test("Work logs: a genuine zero in a mapped column stays zero", () => {

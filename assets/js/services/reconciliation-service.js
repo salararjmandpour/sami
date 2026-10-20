@@ -3,7 +3,7 @@ import { CALCULATION_VERSION } from "../utils/constants.js";
 import { comparable, normalizeString } from "./normalization/string-normalizer.js";
 import { isExcelDurationFormat, normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
 import { sum, average } from "./calculations/time-calculator.js";
-import { buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
+import { buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown, buildWorkLogQualityWarnings, resolvePersonWorkLogColumn } from "./work-log-category-service.js";
 
 const TOLERANCE = 0.01;
 const PLAN_TYPES = ["planned", "unplanned", "carry_over", "unknown"];
@@ -193,10 +193,12 @@ function buildWorkLogReconciliation(context) {
   const rows = context.issues.map((issue) => {
     const sourceMeta = getMeta(issue, sourceColumn);
     const source = normalizePossibleExcelHours(issue.raw?.[sourceColumn], sourceMeta);
-    const personValues = context.personMappings.filter((mapping) => mapping.enabled !== false && mapping.workLogColumn).map((mapping) => {
-      const meta = getMeta(issue, mapping.workLogColumn);
-      return { person: mapping.jiraName, column: mapping.workLogColumn, rawValue: issue.raw?.[mapping.workLogColumn], cellType: meta.type || "", format: meta.format || "", normalizedHours: normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], meta).hours };
-    });
+    const personValues = context.personMappings.filter((mapping) => mapping.enabled !== false).map((mapping) => {
+      const column = resolvePersonWorkLogColumn(context.issues, mapping);
+      if (!column) return null;
+      const meta = getMeta(issue, column);
+      return { person: mapping.jiraName, column, rawValue: issue.raw?.[column], cellType: meta.type || "", format: meta.format || "", normalizedHours: normalizePossibleExcelHours(issue.raw?.[column], meta).hours };
+    }).filter(Boolean);
     const mappedTotal = sumRecorded(personValues.map((value) => value.normalizedHours));
     const managementTotal = recordedHours(source.hours);
     return {
@@ -443,8 +445,9 @@ function selectManagementWorkLogColumn(context) {
 }
 
 function sumPersonWork(issues, mapping) {
-  if (!mapping.workLogColumn) return null;
-  return sumRecorded(issues.map((issue) => recordedHours(normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], getMeta(issue, mapping.workLogColumn)).hours)));
+  const column = resolvePersonWorkLogColumn(issues, mapping);
+  if (!column) return null;
+  return sumRecorded(issues.map((issue) => recordedHours(normalizePossibleExcelHours(issue.raw?.[column], getMeta(issue, column)).hours)));
 }
 
 function recordedHours(value) {

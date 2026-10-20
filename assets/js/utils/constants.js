@@ -13,6 +13,7 @@ export const KPI_CARD_ORDER = [
 
 export const KPI_LABELS = {
   totalCapacity: "Total Capacity",
+  availableCapacity: "Available Capacity",
   plannedCapacity: "Planned Capacity",
   unplannedCapacity: "Unplanned Capacity",
   totalPlannedCapacity: "Total Planned Capacity",

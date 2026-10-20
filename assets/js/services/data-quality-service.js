@@ -1,6 +1,6 @@
 import { REQUIRED_FIELDS } from "../utils/constants.js";
 import { buildBlockedTimeWarnings } from "./reconciliation-service.js";
-import { buildManagementWorkLogBreakdown, buildPersonWorkLogValueWarnings, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
+import { buildManagementWorkLogBreakdown, buildPersonWorkLogValueWarnings, buildWorkLogQualityWarnings, resolvePersonWorkLogColumn } from "./work-log-category-service.js";
 import { startDetectionSource } from "./normalization/status-normalizer.js";
 
 export function buildQualityReport({ jira, fieldMap, capacity, issues, personMappings = [], workCategoryMapping }) {
@@ -37,8 +37,8 @@ export function buildQualityReport({ jira, fieldMap, capacity, issues, personMap
   if (fieldMap?.doneDate && !(issues || []).some((row) => row.doneDate)) items.push(issue("warning", "Missing Done Date", "ستون تاریخ Done نگاشت شده است، اما هیچ مسئله‌ای تاریخ Done ندارد. Lead Time و Cycle Time قابل محاسبه نیستند."));
   if (fieldMap?.blockedTime && !(issues || []).some((row) => Number.isFinite(row.blockedHours))) items.push(issue("warning", "Missing Blocked Time", "ستون زمان بلاک نگاشت شده است، اما هیچ مقداری ندارد. زمان بلاک N/A است."));
   if (fieldMap?.issueType && !(issues || []).some((row) => row.issueType)) items.push(issue("info", "Missing Issue Type", "ستون نوع مسئله خالی است. شمارش Hotfix و Bug فقط از برچسب‌ها ممکن است."));
-  items.push(...unmappedPersonWorkLogWarnings(personMappings));
-  const hasPersonWorkColumns = personMappings.some((mapping) => mapping.workLogColumn);
+  items.push(...unmappedPersonWorkLogWarnings(personMappings, issues));
+  const hasPersonWorkColumns = personMappings.some((mapping) => resolvePersonWorkLogColumn(issues || [], mapping));
   if (!hasPersonWorkColumns && (issues || []).some((row) => row.planType === "carry_over" && row.workLogged > 0)) {
     items.push(issue("warning", "Carry-over issue has issue-level Work Logged but no per-person work-log allocation", "Developer carry-over logged time cannot be allocated without mapped person work-log columns."));
   }
@@ -49,8 +49,8 @@ export function buildQualityReport({ jira, fieldMap, capacity, issues, personMap
   return items;
 }
 
-export function unmappedPersonWorkLogWarnings(personMappings = []) {
-  return personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && !mapping.workLogColumn).map((mapping) => issue(
+export function unmappedPersonWorkLogWarnings(personMappings = [], issues = []) {
+  return personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && !resolvePersonWorkLogColumn(issues, mapping)).map((mapping) => issue(
     "warning",
     "Missing person work-log column",
     `${mapping.jiraName}: ستون Work Log این فرد نگاشت نشده یا در دسترس نیست. داده Work Log فردی ناموجود است و KPI مربوط N/A است. ساعت تیم به این فرد داده نمی‌شود.`
@@ -74,7 +74,7 @@ export function refreshWorkLogQualityItems(items, context) {
   if (!Array.isArray(context?.issues) || !Array.isArray(context?.personMappings)) return items || [];
   const breakdown = buildManagementWorkLogBreakdown(context.issues, context.personMappings, {}, context.workCategoryMapping);
   const fresh = [
-    ...unmappedPersonWorkLogWarnings(context.personMappings),
+    ...unmappedPersonWorkLogWarnings(context.personMappings, context.issues),
     ...buildWorkLogQualityWarnings(breakdown),
     ...buildPersonWorkLogValueWarnings(context.issues, context.personMappings)
   ];

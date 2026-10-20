@@ -1,5 +1,6 @@
 import { DEFAULT_PERSON_MAPPING } from "../config/person-mapping.js";
 import { personCapacityRecord } from "../services/calculations/capacity-calculator.js";
+import { resolvePersonWorkLogColumn } from "../services/work-log-category-service.js";
 import { comparable } from "../services/normalization/string-normalizer.js";
 
 function present(value) {
@@ -62,7 +63,10 @@ export function buildInitialPersonMappings(capacityPeople, jiraRows, saved = [])
       map.set(`jira:${comparable(name)}`, { capacityName: "", jiraName: name, role: "developer", workLogColumn: "", enabled: true });
     }
   });
-  return [...map.values()];
+  return [...map.values()].map((entry) => {
+    const resolved = resolvePersonWorkLogColumn(jiraRows, entry);
+    return resolved && !comparable(entry.workLogColumn) ? { ...entry, workLogColumn: resolved } : entry;
+  });
 }
 
 export function capacityByMapping(capacityPeople, mappings) {

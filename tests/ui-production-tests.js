@@ -104,7 +104,9 @@ test("Person dashboards expose new metric drill-down buttons", () => {
         unplannedIssueCount: { displayValue: "0" },
         startedUnplannedIssueCount: { displayValue: "0" },
         carryOverWorkLogged: { displayValue: "2h" },
-        carryOver: { displayValue: "99h" }
+        carryOver: { displayValue: "99h" },
+        productiveWorkLogged: { displayValue: "N/A", reason: "ستون Work Log این فرد در فایل Jira وجود ندارد؛ این مقدار ساعت ثبت‌شده نیست." },
+        availableCapacity: { displayValue: "۱۱۰٫۸h" }
       },
       planningDrillDown: {
         plannedIssueKeys: [{ issueKey: "A-1", planType: "Planned" }],
@@ -119,6 +121,9 @@ test("Person dashboards expose new metric drill-down buttons", () => {
     ok(target.innerHTML.includes('data-person-drill="carryOverWorkLogged"'));
     equal(target.innerHTML.includes(">Carry Over</h3><div class=\"kpi-value\">99h"), false);
     equal(target.innerHTML.includes("carry_over"), false);
+    ok(target.innerHTML.includes("Available Capacity"));
+    ok(target.innerHTML.includes("kpi-reason"));
+    ok(target.innerHTML.includes("Work Log"));
   } finally {
     cleanup();
   }

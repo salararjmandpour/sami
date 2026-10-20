@@ -1,6 +1,6 @@
 import { FIELD_ALIASES } from "../config/field-aliases.js";
 import { WORK_CATEGORY_MAPPING, WORK_CATEGORY_PRIORITY } from "../config/work-category-mapping.js";
-import { comparable, normalizeString } from "./normalization/string-normalizer.js";
+import { comparable, looseComparable, normalizeString } from "./normalization/string-normalizer.js";
 import { isExcelDurationFormat, normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
 
 const TOLERANCE = 0.01;
@@ -59,13 +59,27 @@ export function buildManagementWorkLogBreakdown(issues, personMappings = [], fie
 }
 
 export function buildPersonWorkLogBreakdown(issues, mapping, categoryMapping = WORK_CATEGORY_MAPPING) {
-  const column = mapping?.workLogColumn || "";
-  const identity = { sourceColumn: column, scope: "person", person: mapping?.jiraName || "", role: mapping?.role || "" };
-  if (!column || columnIsAbsent(issues, column)) {
+  const column = resolvePersonWorkLogColumn(issues, mapping);
+  const identity = { sourceColumn: column || mapping?.workLogColumn || "", scope: "person", person: mapping?.jiraName || "", role: mapping?.role || "" };
+  if (!column) {
     return finalizeBreakdown([], { ...identity, sourceMissing: true });
   }
   const rows = issues.map((issue) => issueBreakdown(issue, column, categoryMapping));
   return finalizeBreakdown(rows, identity);
+}
+
+export function resolvePersonWorkLogColumn(issues, mapping = {}) {
+  const headers = issueHeaders(issues);
+  if (!headers.length) return "";
+  const configured = normalizeString(mapping?.workLogColumn || "");
+  if (configured) {
+    const exact = headers.find((header) => header === configured);
+    if (exact) return exact;
+    const configuredKey = compactHeader(configured);
+    const loose = headers.find((header) => compactHeader(header) === configuredKey);
+    if (loose) return loose;
+  }
+  return detectPersonWorkLogColumn(headers, mapping);
 }
 
 export function buildWorkLogQualityWarnings(breakdown) {
@@ -106,10 +120,12 @@ export function buildWorkLogQualityWarnings(breakdown) {
 
 export function buildPersonWorkLogValueWarnings(issues, personMappings = []) {
   const warnings = [];
-  personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && mapping.workLogColumn).forEach((mapping) => {
-    const column = mapping.workLogColumn;
-    if (columnIsAbsent(issues, column)) {
-      warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Missing person work-log column", message: `${mapping.jiraName}: ستون ${column} در فایل Jira وجود ندارد. زمان ثبت‌شده این فرد N/A است و از جمع تیم پر نمی‌شود.` });
+  personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName).forEach((mapping) => {
+    const column = resolvePersonWorkLogColumn(issues, mapping);
+    if (!column) {
+      if (normalizeString(mapping.workLogColumn)) {
+        warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Missing person work-log column", message: `${mapping.jiraName}: ستون ${mapping.workLogColumn} در فایل Jira وجود ندارد. زمان ثبت‌شده این فرد N/A است و از جمع تیم پر نمی‌شود.` });
+      }
       return;
     }
     const population = { recorded: 0, blank: 0, rejected: 0 };
@@ -177,11 +193,13 @@ export function selectManagementWorkLogColumn(issues, personMappings = []) {
 export function sumMappedPersonColumns(issue, personMappings = []) {
   const seen = new Set();
   const hours = [];
-  personMappings.filter((mapping) => mapping.enabled !== false && mapping.workLogColumn).forEach((mapping) => {
-    const column = comparable(mapping.workLogColumn);
+  personMappings.filter((mapping) => mapping.enabled !== false).forEach((mapping) => {
+    const resolved = resolvePersonWorkLogColumn([issue], mapping);
+    if (!resolved) return;
+    const column = comparable(resolved);
     if (seen.has(column)) return;
     seen.add(column);
-    hours.push(finiteHours(normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], getMeta(issue, mapping.workLogColumn)).hours));
+    hours.push(finiteHours(normalizePossibleExcelHours(issue.raw?.[resolved], getMeta(issue, resolved)).hours));
   });
   return sumRecorded(hours);
 }
@@ -337,8 +355,53 @@ function sumRecorded(values) {
   return seen ? total : null;
 }
 
-function columnIsAbsent(issues, column) {
-  return Boolean(column) && (issues || []).length > 0 && !(issues || []).some((issue) => issue?.raw && Object.hasOwn(issue.raw, column));
+function issueHeaders(issues) {
+  const headers = new Set();
+  (issues || []).forEach((issue) => {
+    Object.keys(issue?.raw || {}).forEach((key) => {
+      if (!key.startsWith("__")) headers.add(key);
+    });
+  });
+  return [...headers];
+}
+
+function detectPersonWorkLogColumn(headers, mapping = {}) {
+  const tokens = personNameTokens(mapping);
+  if (!tokens.length) return "";
+  const teamTotals = new Set((FIELD_ALIASES.totalWorkLogged || []).map((alias) => comparable(alias)));
+  const candidates = headers.filter((header) => {
+    const key = comparable(header);
+    if (teamTotals.has(key)) return false;
+    return isPersonalWorkLogHeader(key);
+  });
+  let best = "";
+  let bestScore = 0;
+  candidates.forEach((header) => {
+    const key = comparable(header);
+    const matched = tokens.filter((token) => key.includes(token));
+    if (!matched.length) return;
+    const score = matched.reduce((total, token) => total + token.length, 0) * 10 + matched.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = header;
+    }
+  });
+  return best;
+}
+
+function personNameTokens(mapping = {}) {
+  return [...new Set([mapping.jiraName, mapping.capacityName]
+    .flatMap((value) => comparable(value).split(/[^a-z0-9\u0600-\u06ff]+/))
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3))];
+}
+
+function isPersonalWorkLogHeader(comparableHeader) {
+  return /work\s*logged|work\s*today|worklogged|worktoday|log\s*time|زمان\s*کار|ورک\s*لاگ/.test(comparableHeader);
+}
+
+function compactHeader(value) {
+  return looseComparable(value).replace(/\s+/g, "");
 }
 
 function getMeta(issue, columnName) {

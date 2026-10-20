@@ -19,7 +19,11 @@ export function renderScrumDashboards(people) {
   }
   target.innerHTML = people.map((person, personIndex) => `<section class="person-dashboard panel">
     <h3>${escapeHtml(person.name)} <span class="badge">${escapeHtml(person.role)}</span></h3>
-    <div class="kpi-grid">${personKeysForRole(person.role).map((key) => `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(person.metrics[key]?.displayValue || "N/A")}</div>${metricPublicationHtml(person.metrics[key])}${PERSON_DRILL_KEYS[key] && person.planningDrillDown?.[PERSON_DRILL_KEYS[key]] ? `<button class="button button-secondary drill-button" data-person-index="${personIndex}" data-person-drill="${escapeHtml(key)}" type="button">جزئیات</button>` : ""}</article>`).join("")}</div>
+    <div class="kpi-grid">${personKeysForRole(person.role).map((key) => {
+      const item = person.metrics[key] || { displayValue: "N/A" };
+      const reason = item.displayValue === "N/A" && item.reason ? `<div class="kpi-reason">${escapeHtml(item.reason)}</div>` : "";
+      return `<article class="kpi-card"><h3>${escapeHtml(KPI_LABELS[key] || key)}</h3><div class="kpi-value">${escapeHtml(item.displayValue || "N/A")}</div>${reason}${metricPublicationHtml(item)}${PERSON_DRILL_KEYS[key] && person.planningDrillDown?.[PERSON_DRILL_KEYS[key]] ? `<button class="button button-secondary drill-button" data-person-index="${personIndex}" data-person-drill="${escapeHtml(key)}" type="button">جزئیات</button>` : ""}</article>`;
+    }).join("")}</div>
   </section>`).join("");
   target.querySelectorAll("[data-person-drill]").forEach((button) => button.addEventListener("click", () => {
     const person = people[Number(button.dataset.personIndex)];
