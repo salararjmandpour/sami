@@ -167,6 +167,24 @@ test("Default person mapping still enriches a matching capacity column", () => {
   equal(mappings[0].role, "developer");
 });
 
+test("Stale Work Today preset refreshes to Today personal column from the import", () => {
+  const rows = [
+    { assignee: "Ali Bahrampour", qaOwner: "Ali Bahrampour", raw: { "Σ Time Spent": 9, "Today Ali": 2, "Logged moslem": 1 } },
+    { assignee: "Moslem Seydmohamadi", raw: { "Σ Time Spent": 9, "Today Ali": 0, "Logged moslem": 4 } }
+  ];
+  const mappings = buildInitialPersonMappings(
+    [
+      { id: "capacity-col-1", capacityName: "مسلم" },
+      { id: "capacity-col-7", capacityName: "علی" }
+    ],
+    rows,
+    []
+  );
+  equal(mappings.find((mapping) => mapping.capacityName === "مسلم").workLogColumn, "Logged moslem");
+  equal(mappings.find((mapping) => mapping.capacityName === "علی").workLogColumn, "Today Ali");
+  equal(mappings.find((mapping) => mapping.capacityName === "علی").workLogColumn === "Work Today Ali", false);
+});
+
 test("Copy settings captures report metadata and mappings", () => {
   const settings = duplicatedSettingsFromReport({
     teamName: "تیم محصول",

@@ -195,6 +195,101 @@ test("Work logs: empty mapping auto-detects a personal column and does not use t
   equal(person.metrics.nonProductiveWorkLogged.value, 0);
 });
 
+test("Work logs: hyphenated personal headers resolve and team totals stay unused", () => {
+  const rows = [{
+    issueKey: "H-1",
+    issueKeyComparable: "h-1",
+    summary: "Feature",
+    labels: [],
+    assignee: "Moslem Seydmohamadi",
+    qaOwner: "",
+    planType: "planned",
+    statusCanonical: "done",
+    status: "Done",
+    firstInProgress: "2026-01-26T00:00:00.000Z",
+    raw: { "Σ Time Spent": 99, "Work-Logged Moslem": 7 }
+  }, {
+    issueKey: "H-2",
+    issueKeyComparable: "h-2",
+    summary: "Follow-up",
+    labels: [],
+    assignee: "Moslem Seydmohamadi",
+    qaOwner: "",
+    planType: "unplanned",
+    statusCanonical: "done",
+    status: "Done",
+    firstInProgress: "2026-10-07T00:00:00.000Z",
+    raw: { "Σ Time Spent": 99, "Work-Logged Moslem": 3 }
+  }];
+  const mappingRow = { jiraName: "Moslem Seydmohamadi", capacityName: "مسلم", role: "developer", workLogColumn: "", enabled: true };
+  equal(resolvePersonWorkLogColumn(rows, mappingRow), "Work-Logged Moslem");
+  equal(resolvePersonWorkLogColumn([{ raw: { "Σ Time Spent": 99, "Time Spent": 40 } }], mappingRow), "");
+  const person = calculatePersonDashboards(rows, [], [mappingRow], mapping)[0];
+  equal(person.metrics.productiveWorkLogged.value, 10);
+  equal(person.metrics.productiveWorkLogged.displayValue === "N/A", false);
+  equal(person.metrics.productiveWorkLogged.publication.calculationPeriod.from, "2026-01-26");
+  equal(person.metrics.productiveWorkLogged.publication.calculationPeriod.to, "2026-10-07");
+  equal(person.workLogBreakdown.sourceColumn, "Work-Logged Moslem");
+  equal(person.metrics.rawWorkLogged.value === 99, false);
+});
+
+test("Work logs: Logged/Today personal headers from alternate Jira export schema resolve", () => {
+  const rows = [{
+    issueKey: "L-1",
+    issueKeyComparable: "l-1",
+    summary: "Build",
+    labels: [],
+    assignee: "Moslem Seydmohamadi",
+    qaOwner: "Ali Bahrampour",
+    planType: "planned",
+    statusCanonical: "done",
+    status: "Done",
+    firstInProgress: "2026-01-26T00:00:00.000Z",
+    raw: {
+      "Σ Time Spent": 40,
+      "Logged moslem": 5,
+      "Logged ahad": 0,
+      "logged ava": 0,
+      "Logged Elham": 0,
+      "Logged edrise": 0,
+      "Logged kianoush": 0,
+      "Today Ali": 2
+    }
+  }, {
+    issueKey: "L-2",
+    issueKeyComparable: "l-2",
+    summary: "QA review",
+    labels: [],
+    assignee: "Edris Poursadeghi",
+    qaOwner: "Ali Bahrampour",
+    planType: "unplanned",
+    statusCanonical: "done",
+    status: "Done",
+    firstInProgress: "2026-10-07T00:00:00.000Z",
+    raw: {
+      "Σ Time Spent": 40,
+      "Logged moslem": 0,
+      "Logged edrise": 3,
+      "Today Ali": 1
+    }
+  }];
+  equal(resolvePersonWorkLogColumn(rows, { jiraName: "Moslem Seydmohamadi", capacityName: "مسلم", workLogColumn: "" }), "Logged moslem");
+  equal(resolvePersonWorkLogColumn(rows, { jiraName: "Edris Poursadeghi", capacityName: "ادریس", workLogColumn: "" }), "Logged edrise");
+  equal(resolvePersonWorkLogColumn(rows, { jiraName: "Ali Bahrampour", capacityName: "علی", role: "qa", workLogColumn: "Work Today Ali" }), "Today Ali");
+  equal(resolvePersonWorkLogColumn(rows, { jiraName: "Hadi Abedi", workLogColumn: "" }), "");
+
+  const moslem = calculatePersonDashboards(rows, [], [{ jiraName: "Moslem Seydmohamadi", capacityName: "مسلم", role: "developer", workLogColumn: "", enabled: true }], mapping)[0];
+  equal(moslem.workLogBreakdown.sourceMissing, undefined);
+  equal(moslem.workLogBreakdown.sourceColumn, "Logged moslem");
+  equal(moslem.metrics.productiveWorkLogged.value, 5);
+  equal(moslem.metrics.rawWorkLogged.value === 40, false);
+
+  const ali = calculatePersonDashboards(rows, [], [{ jiraName: "Ali Bahrampour", capacityName: "علی", role: "qa", workLogColumn: "Work Today Ali", enabled: true }], mapping)[0];
+  equal(ali.workLogBreakdown.sourceColumn, "Today Ali");
+  equal(ali.metrics.productiveWorkLogged.value, 3);
+  equal(ali.metrics.productiveWorkLogged.displayValue === "N/A", false);
+});
+
 test("Screenshot regression: capacity and counts stay available when personal work logs are missing", () => {
   const planned = Array.from({ length: 12 }, (_, index) => issue({
     issueKey: `P-${index + 1}`,

@@ -1,10 +1,16 @@
 import { DEFAULT_PERSON_MAPPING } from "../config/person-mapping.js";
 import { personCapacityRecord } from "../services/calculations/capacity-calculator.js";
 import { resolvePersonWorkLogColumn } from "../services/work-log-category-service.js";
-import { comparable } from "../services/normalization/string-normalizer.js";
+import { comparable, looseComparable } from "../services/normalization/string-normalizer.js";
 
 function present(value) {
   return comparable(value) ? value : "";
+}
+
+function columnKeysMatch(left, right) {
+  if (!comparable(left) || !comparable(right)) return false;
+  if (comparable(left) === comparable(right)) return true;
+  return looseComparable(left).replace(/\s+/g, "") === looseComparable(right).replace(/\s+/g, "");
 }
 
 function mergeIdentity(base, overlay) {
@@ -65,7 +71,12 @@ export function buildInitialPersonMappings(capacityPeople, jiraRows, saved = [])
   });
   return [...map.values()].map((entry) => {
     const resolved = resolvePersonWorkLogColumn(jiraRows, entry);
-    return resolved && !comparable(entry.workLogColumn) ? { ...entry, workLogColumn: resolved } : entry;
+    if (!resolved) return entry;
+    if (!comparable(entry.workLogColumn)) return { ...entry, workLogColumn: resolved };
+    // Keep an explicit mapping only while it still resolves to that same header.
+    // Stale presets (e.g. "Work Today Ali" when the file has "Today Ali") are refreshed.
+    if (columnKeysMatch(entry.workLogColumn, resolved)) return entry;
+    return { ...entry, workLogColumn: resolved };
   });
 }
 

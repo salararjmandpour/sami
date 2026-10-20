@@ -368,16 +368,16 @@ function issueHeaders(issues) {
 function detectPersonWorkLogColumn(headers, mapping = {}) {
   const tokens = personNameTokens(mapping);
   if (!tokens.length) return "";
-  const teamTotals = new Set((FIELD_ALIASES.totalWorkLogged || []).map((alias) => comparable(alias)));
+  const teamTotals = new Set((FIELD_ALIASES.totalWorkLogged || []).map((alias) => looseComparable(alias)));
   const candidates = headers.filter((header) => {
-    const key = comparable(header);
+    const key = looseComparable(header);
     if (teamTotals.has(key)) return false;
     return isPersonalWorkLogHeader(key);
   });
   let best = "";
   let bestScore = 0;
   candidates.forEach((header) => {
-    const key = comparable(header);
+    const key = looseComparable(header);
     const matched = tokens.filter((token) => key.includes(token));
     if (!matched.length) return;
     const score = matched.reduce((total, token) => total + token.length, 0) * 10 + matched.length;
@@ -391,13 +391,15 @@ function detectPersonWorkLogColumn(headers, mapping = {}) {
 
 function personNameTokens(mapping = {}) {
   return [...new Set([mapping.jiraName, mapping.capacityName]
-    .flatMap((value) => comparable(value).split(/[^a-z0-9\u0600-\u06ff]+/))
+    .flatMap((value) => looseComparable(value).split(/[^a-z0-9\u0600-\u06ff]+/))
     .map((token) => token.trim())
     .filter((token) => token.length >= 3))];
 }
 
-function isPersonalWorkLogHeader(comparableHeader) {
-  return /work\s*logged|work\s*today|worklogged|worktoday|log\s*time|زمان\s*کار|ورک\s*لاگ/.test(comparableHeader);
+function isPersonalWorkLogHeader(headerKey) {
+  // Personal exports vary: "Work Logged X", "Logged X", "Work Today X", "Today X", "Time Spent X", …
+  // Team totals are excluded separately via FIELD_ALIASES.totalWorkLogged before this runs.
+  return /work\s*logged|work\s*today|worklogged|worktoday|work\s*log\b|worklog|\blogged\b|\btoday\b|log\s*time|time\s*spent|زمان\s*کار|ورک\s*لاگ/.test(headerKey);
 }
 
 function compactHeader(value) {
