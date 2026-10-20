@@ -41,7 +41,7 @@ export function renderIssueTable(issues) {
 function display(issue, key) {
   if (["created", "firstInProgress", "firstAutomationTest", "doneDate"].includes(key)) return formatDate(issue[key]);
   const breakdown = issue.workLogCategoryBreakdown || {};
-  if (key in breakdown) return formatNumber(breakdown[key]);
+  if (["rawWorkLoggedHours", "productiveWorkLoggedHours", "blockWorkLoggedHours", "meetingWorkLoggedHours", "technicalWorkLoggedHours", "versionWorkLoggedHours", "technicalVersionWorkLoggedHours"].includes(key)) return formatNumber(breakdown[key]);
   if (key === "workCategory") return breakdown.workCategory || "productive";
   if (["devEstimate", "testEstimate", "workLogged", "leadTimeHours", "cycleTimeHours", "blockedHours"].includes(key)) return formatNumber(issue[key]);
   if (key === "labels") return issue.labels.join("، ") || "N/A";

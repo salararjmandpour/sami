@@ -8,6 +8,7 @@ import { applyIssueFilters, readActiveFilters } from "./filter-controller.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../services/calculations/report-calculator.js";
 import { buildReconciliation } from "../services/reconciliation-service.js";
 import { exportCsv, exportDataQualityExcel, exportJson, exportManagementExcel, exportReportExcel, exportScrumExcel } from "../services/export-service.js";
+import { refreshWorkLogQualityItems } from "../services/data-quality-service.js";
 import { dbPut } from "../services/indexeddb-service.js";
 import { getReport, saveReport, storageSavedMessage } from "../services/report-storage-service.js";
 import { comparable } from "../services/normalization/string-normalizer.js";
@@ -15,21 +16,14 @@ import { CALCULATION_VERSION } from "../utils/constants.js";
 import { notify } from "../views/notification-view.js";
 import { isLegacyPublicationSnapshot } from "../services/kpi-publication.js";
 
+let openRecalculatedReport = () => {};
+
 export function renderReport(report, reports, onOpenReport = () => {}) {
   if (!report) return;
+  openRecalculatedReport = onOpenReport;
   document.getElementById("managementSubtitle").textContent = `${report.teamName || "بدون تیم"} - ${report.sprintName || "بدون اسپرینت"}`;
   renderFilters(reports, report);
-  renderQualitySummary(report);
-  renderSourceActions(report);
   renderFilteredViews(report);
-  document.getElementById("recalculateReportBtn")?.addEventListener("click", async () => {
-    if (!confirm(`گزارش با نسخه ${CALCULATION_VERSION} دوباره محاسبه شود؟ گزارش قبلی تغییر نمی‌کند.`)) return;
-    const recalculated = recalculateReportCopy(report);
-    const saved = await saveReport(recalculated);
-    notify(storageSavedMessage(saved), saved.fallback ? "error" : "info");
-    await dbPut("metricResults", { id: recalculated.id, calculatedMetrics: recalculated.calculatedMetrics, calculationVersion: recalculated.calculationVersion });
-    onOpenReport(recalculated);
-  });
   document.getElementById("reportFilter")?.addEventListener("change", (event) => {
     getReport(event.target.value).then(onOpenReport);
   });
@@ -37,10 +31,6 @@ export function renderReport(report, reports, onOpenReport = () => {}) {
     document.getElementById(id)?.addEventListener("input", () => renderFilteredViews(report));
     document.getElementById(id)?.addEventListener("change", () => renderFilteredViews(report));
   });
-  const reconciliationButton = document.getElementById("exportReconciliationBtn");
-  if (reconciliationButton) reconciliationButton.onclick = () => exportJson("jira-kpi-reconciliation.json", report.reconciliation || {});
-  const reportExcelButton = document.getElementById("exportReportExcelBtn");
-  if (reportExcelButton) reportExcelButton.onclick = () => exportReportExcel(report);
 }
 
 export function recalculateReportCopy(report) {
@@ -75,7 +65,7 @@ function renderFilteredViews(report) {
     management: calculateManagementMetrics(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping),
     people: filterPeopleByFilters(calculatePersonDashboards(filtered, report.normalizedData.capacityPeople, report.mappingSnapshot.personMappings, report.workCategoryMapping), filters)
   };
-  const filteredQuality = filterDataQualityItems(report, filtered, filters);
+  const filteredQuality = displayedQuality(report, filtered, filters);
   const filteredReconciliation = buildReconciliation({
     report: { teamName: report.teamName, sprintName: report.sprintName, calculatedMetrics, workCategoryMapping: report.workCategoryMapping },
     issues: filtered,
@@ -87,6 +77,9 @@ function renderFilteredViews(report) {
   });
   const filteredReport = { ...report, calculatedMetrics, normalizedData: { ...report.normalizedData, issues: filtered }, dataQuality: filteredQuality, reconciliation: filteredReconciliation };
   attachIssueWorkLogBreakdown(filtered, calculatedMetrics.management.workLogBreakdown);
+  renderQualitySummary(filteredReport);
+  renderSourceActions(filteredReport);
+  bindRecalculate(report);
   renderKpiCards(calculatedMetrics.management, filteredReconciliation.drillDown || {}, filteredReport, filters, { legacySnapshot: isLegacyPublicationSnapshot(report) });
   renderScrumDashboards(calculatedMetrics.people);
   renderQuality(filteredQuality);
@@ -94,13 +87,17 @@ function renderFilteredViews(report) {
   renderIssueTable(filtered);
   renderReconciliation(filteredReconciliation);
   document.getElementById("exportIssueCsvBtn")?.addEventListener("click", () => exportCsv("issues.csv", getIssueCsvRows(filtered)));
-  wireSectionExports(filteredReport, filters);
+  wireSectionExports(filteredReport, filters, report);
 }
 
-function wireSectionExports(filteredReport, filters) {
+function wireSectionExports(filteredReport, filters, sourceReport) {
   const management = document.getElementById("exportManagementExcelBtn");
   const scrum = document.getElementById("exportScrumExcelBtn");
   const quality = document.getElementById("exportDataQualityExcelBtn");
+  const reportExcel = document.getElementById("exportReportExcelBtn");
+  const reconciliationButton = document.getElementById("exportReconciliationBtn");
+  if (reportExcel) reportExcel.onclick = () => exportReportExcel(filteredReport, { identityReport: sourceReport });
+  if (reconciliationButton) reconciliationButton.onclick = () => exportJson("jira-kpi-reconciliation.json", filteredReport.reconciliation || {});
   if (management) {
     management.disabled = false;
     management.onclick = () => exportManagementExcel(filteredReport, filters);
@@ -115,11 +112,34 @@ function wireSectionExports(filteredReport, filters) {
   }
 }
 
+function bindRecalculate(report) {
+  const button = document.getElementById("recalculateReportBtn");
+  if (!button) return;
+  button.onclick = async () => {
+    if (!confirm(`گزارش با نسخه ${CALCULATION_VERSION} دوباره محاسبه شود؟ گزارش قبلی تغییر نمی‌کند.`)) return;
+    const recalculated = recalculateReportCopy(report);
+    const saved = await saveReport(recalculated);
+    notify(storageSavedMessage(saved), saved.fallback ? "error" : "info");
+    await dbPut("metricResults", { id: recalculated.id, calculatedMetrics: recalculated.calculatedMetrics, calculationVersion: recalculated.calculationVersion });
+    openRecalculatedReport(recalculated);
+  };
+}
+
 function filterPeopleByFilters(people, filters) {
   return people.filter((person) => {
     if (filters.role && person.role !== filters.role) return false;
     if (filters.person && comparable(person.name) !== comparable(filters.person)) return false;
     return true;
+  });
+}
+
+function displayedQuality(report, filteredIssues, filters) {
+  const stored = filterDataQualityItems(report, filteredIssues, filters);
+  if (!reportMatchesTextFilters(report, filters)) return stored;
+  return refreshWorkLogQualityItems(stored, {
+    issues: filteredIssues,
+    personMappings: report.mappingSnapshot?.personMappings,
+    workCategoryMapping: report.workCategoryMapping
   });
 }
 

@@ -66,11 +66,11 @@ export function renderCharts(report) {
   const issues = report?.normalizedData?.issues || [];
   const blockedRows = issues.filter((issue) => Number.isFinite(issue.blockedHours) && issue.blockedHours > 0).sort((a, b) => b.blockedHours - a.blockedHours).slice(0, 12);
   replaceChart("capacityChart", bar("بهره‌برداری ظرفیت", people.map((p) => p.name), people.map((p) => valueOrNull(p.metrics?.capacityUtilization?.value)), "%"));
-  replaceChart("workMixChart", doughnut("ترکیب کار", ["Planned", "Unplanned", "Carry Over"], [management.workMix?.planned ?? null, management.workMix?.unplanned ?? null, management.workMix?.carry_over ?? null], "h"));
+  replaceChart("workMixChart", doughnut("ترکیب کار", ["Planned", "Unplanned", "Carry Over"], [valueOrNull(management.workMix?.planned), valueOrNull(management.workMix?.unplanned), valueOrNull(management.workMix?.carry_over)], "h"));
   replaceChart("deliveryChart", bar("نرخ تحویل افراد", people.map((p) => p.name), people.map((p) => valueOrNull(p.metrics?.deliveryRate?.value)), "%"));
   replaceChart("qaChart", doughnut("QA Return / First Pass", ["Returned", "First Pass"], [valueOrNull(management.qaReturnRate?.value), valueOrNull(management.firstPassRate?.value)], "%"));
   replaceChart("blockedChart", bar("زمان بلاک", blockedRows.map((issue) => issue.issueKey), blockedRows.map((issue) => issue.blockedHours), "h"));
-  renderBlockedOutlierNote(blockedRows);
+  renderBlockedOutlierNote(blockedRows, issues);
 }
 
 function valueOrNull(value) {
@@ -105,11 +105,14 @@ function doughnut(label, labels, data, unit) {
   };
 }
 
-function renderBlockedOutlierNote(blockedRows) {
+function renderBlockedOutlierNote(blockedRows, issues = []) {
   const target = document.getElementById("blockedChartNote");
   if (!target) return;
   if (!blockedRows.length) {
-    target.textContent = "برای زمان بلاک داده‌ای وجود ندارد.";
+    const finite = (issues || []).filter((issue) => Number.isFinite(issue.blockedHours));
+    target.textContent = finite.length && finite.every((issue) => issue.blockedHours === 0)
+      ? "زمان بلاک ثبت‌شده صفر است."
+      : "برای زمان بلاک داده‌ای وجود ندارد.";
     return;
   }
   const top = blockedRows[0];

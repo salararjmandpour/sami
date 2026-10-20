@@ -1,8 +1,7 @@
 import { FIELD_ALIASES } from "../config/field-aliases.js";
 import { WORK_CATEGORY_MAPPING, WORK_CATEGORY_PRIORITY } from "../config/work-category-mapping.js";
 import { comparable, normalizeString } from "./normalization/string-normalizer.js";
-import { normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
-import { sum } from "./calculations/time-calculator.js";
+import { isExcelDurationFormat, normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
 
 const TOLERANCE = 0.01;
 const CATEGORY_KEYS = ["productive", "block", "meeting", "technical", "version"];
@@ -61,17 +60,12 @@ export function buildManagementWorkLogBreakdown(issues, personMappings = [], fie
 
 export function buildPersonWorkLogBreakdown(issues, mapping, categoryMapping = WORK_CATEGORY_MAPPING) {
   const column = mapping?.workLogColumn || "";
-  if (!column) {
-    return finalizeBreakdown([], {
-      sourceColumn: "",
-      sourceMissing: true,
-      scope: "person",
-      person: mapping?.jiraName || "",
-      role: mapping?.role || ""
-    });
+  const identity = { sourceColumn: column, scope: "person", person: mapping?.jiraName || "", role: mapping?.role || "" };
+  if (!column || columnIsAbsent(issues, column)) {
+    return finalizeBreakdown([], { ...identity, sourceMissing: true });
   }
-  const rows = issues.map((issue) => issueBreakdown(issue, column, categoryMapping)).filter((row) => row.rawWorkLoggedHours !== 0);
-  return finalizeBreakdown(rows, { sourceColumn: column, scope: "person", person: mapping?.jiraName || "", role: mapping?.role || "" });
+  const rows = issues.map((issue) => issueBreakdown(issue, column, categoryMapping));
+  return finalizeBreakdown(rows, identity);
 }
 
 export function buildWorkLogQualityWarnings(breakdown) {
@@ -80,19 +74,65 @@ export function buildWorkLogQualityWarnings(breakdown) {
     if (row.matchedCategories.length > 1) {
       warnings.push(dq("warning", "Multiple Work Categories Matched", `${row.issueKey}: matched ${row.matchedCategories.join(", ")}; selected ${row.workCategory} by priority ${row.priority.join(" > ")}`, row));
     }
-    if (row.rawProductiveWorkLoggedHours < -TOLERANCE) {
+    if (Number.isFinite(row.rawProductiveWorkLoggedHours) && row.rawProductiveWorkLoggedHours < -TOLERANCE) {
       warnings.push(dq("error", "Negative Productive Work Logged", `${row.issueKey}: raw productive work logged is ${row.rawProductiveWorkLoggedHours}h; dashboard value is safely displayed as 0h`, row));
     }
-    if (row.workCategory !== "productive" && row.rawWorkLoggedHours === 0) {
-      warnings.push(dq("warning", "Non-productive issue with no Work Logged", `${row.issueKey}: ${row.workCategory} issue has no Work Logged`, row));
+    if (row.hoursState === "rejected") {
+      warnings.push(dq("warning", "Rejected work-log value", `${row.issueKey}: ${row.sourceColumnUsed} contains ${JSON.stringify(row.rawSourceValue)}, which is not a valid hour value`, row));
     }
-    if (row.rawWorkLoggedHours && row.detectedUnit === "Numeric hours/serial duration") {
+    if (row.workCategory !== "productive" && row.rawWorkLoggedHours === 0) {
+      warnings.push(dq("warning", "Non-productive issue with no Work Logged", `${row.issueKey}: ${row.workCategory} issue has an explicit zero Work Logged`, row));
+    }
+    if (Number.isFinite(row.rawWorkLoggedHours) && row.rawWorkLoggedHours !== 0 && row.detectedUnit === "Numeric hours/serial duration") {
       warnings.push(dq("warning", "Work Logged value with ambiguous unit", `${row.issueKey}: ${row.sourceColumnUsed} has ambiguous numeric unit`, row));
     }
   });
-  if (Math.abs(breakdown?.totals?.reconciliationDifference || 0) > TOLERANCE) {
+  if (Number.isFinite(breakdown?.totals?.reconciliationDifference) && Math.abs(breakdown.totals.reconciliationDifference) > TOLERANCE) {
     warnings.push({ id: crypto.randomUUID(), severity: "error", code: "Work Log reconciliation difference greater than 0.01", message: `Work Log reconciliation difference is ${breakdown.totals.reconciliationDifference}h` });
   }
+  if (breakdown?.scope === "management" && !breakdown.sourceColumn && (breakdown?.rows || []).length) {
+    warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Missing team work-log column", message: "ستون مجموع Work Log تیم در فایل وجود ندارد. این وضعیت با یک ستون موجود ولی ناقص فرق دارد و ساعت تیم به فرد بدون نگاشت داده نمی‌شود." });
+  } else {
+    const population = countHourStates(breakdown?.rows || []);
+    if (population.recorded > 0 && population.blank + population.rejected > 0 && Number.isFinite(breakdown?.totals?.rawWorkLoggedHours)) {
+      warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Partial Work Logged total", message: partialWorkLogMessage(population) });
+    }
+  }
+  if (!breakdown?.sourceMissing && (breakdown?.rows || []).length && !Number.isFinite(breakdown?.totals?.rawWorkLoggedHours)) {
+    warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Work Logged unavailable", message: "No recorded work-log hours were found. Blank and rejected cells were not published as zero." });
+  }
+  return warnings;
+}
+
+export function buildPersonWorkLogValueWarnings(issues, personMappings = []) {
+  const warnings = [];
+  personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && mapping.workLogColumn).forEach((mapping) => {
+    const column = mapping.workLogColumn;
+    if (columnIsAbsent(issues, column)) {
+      warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Missing person work-log column", message: `${mapping.jiraName}: ستون ${column} در فایل Jira وجود ندارد. زمان ثبت‌شده این فرد N/A است و از جمع تیم پر نمی‌شود.` });
+      return;
+    }
+    const population = { recorded: 0, blank: 0, rejected: 0 };
+    (issues || []).forEach((issue) => {
+      const rawValue = issue.raw?.[column];
+      const hours = finiteHours(normalizePossibleExcelHours(rawValue, getMeta(issue, column)).hours);
+      if (hours !== null) {
+        population.recorded += 1;
+        return;
+      }
+      if (normalizeString(rawValue)) {
+        population.rejected += 1;
+        warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Rejected work-log value", issueKey: issue.issueKey, message: `${issue.issueKey}: ${column} contains ${JSON.stringify(rawValue)}, which is not a valid hour value` });
+        return;
+      }
+      population.blank += 1;
+    });
+    if ((issues || []).length && population.recorded === 0) {
+      warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Work Logged unavailable", message: `${mapping.jiraName}: ستون ${column} ساعت ثبت‌شده قابل جمع ندارد. سلول خالی یا نامعتبر صفر حساب نشده است.` });
+    } else if (population.recorded > 0 && population.blank + population.rejected > 0) {
+      warnings.push({ id: crypto.randomUUID(), severity: "warning", code: "Partial Work Logged total", message: `${mapping.jiraName}: ${partialWorkLogMessage(population)}` });
+    }
+  });
   return warnings;
 }
 
@@ -136,22 +176,26 @@ export function selectManagementWorkLogColumn(issues, personMappings = []) {
 
 export function sumMappedPersonColumns(issue, personMappings = []) {
   const seen = new Set();
-  return sum(personMappings.filter((mapping) => mapping.enabled !== false && mapping.workLogColumn).filter((mapping) => {
+  const hours = [];
+  personMappings.filter((mapping) => mapping.enabled !== false && mapping.workLogColumn).forEach((mapping) => {
     const column = comparable(mapping.workLogColumn);
-    if (seen.has(column)) return false;
+    if (seen.has(column)) return;
     seen.add(column);
-    return true;
-  }).map((mapping) => {
-    const meta = getMeta(issue, mapping.workLogColumn);
-    return normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], meta).hours || 0;
-  }));
+    hours.push(finiteHours(normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], getMeta(issue, mapping.workLogColumn)).hours));
+  });
+  return sumRecorded(hours);
 }
 
 function issueBreakdown(issue, sourceColumn, categoryMapping) {
   const classification = classifyIssue(issue, categoryMapping);
   const meta = getMeta(issue, sourceColumn);
-  const parsed = sourceColumn ? normalizePossibleExcelHours(issue.raw?.[sourceColumn], meta) : { hours: issue.workLogged || 0 };
-  const raw = parsed.hours || 0;
+  const sourceValue = sourceColumn ? issue.raw?.[sourceColumn] : issue.workLogged;
+  const parsedHours = sourceColumn ? normalizePossibleExcelHours(sourceValue, meta).hours : finiteHours(issue.workLogged);
+  const raw = finiteHours(parsedHours);
+  const categoryHours = (category) => {
+    if (raw === null) return null;
+    return classification.category === category ? raw : 0;
+  };
   const row = {
     issueKey: issue.issueKey,
     summary: issue.summary,
@@ -165,15 +209,23 @@ function issueBreakdown(issue, sourceColumn, categoryMapping) {
     matchedBy: classification.matchedBy,
     priority: classification.priority,
     sourceColumnUsed: sourceColumn || "mapped person columns fallback",
-    rawSourceValue: sourceColumn ? issue.raw?.[sourceColumn] : raw,
-    detectedUnit: detectUnit(meta, sourceColumn ? issue.raw?.[sourceColumn] : raw),
+    rawSourceValue: sourceValue ?? null,
+    detectedUnit: detectUnit(meta, sourceValue),
+    hoursState: raw === null ? (normalizeString(sourceValue) ? "rejected" : "blank") : "recorded",
     rawWorkLoggedHours: raw,
-    productiveWorkLoggedHours: classification.category === "productive" ? raw : 0,
-    blockWorkLoggedHours: classification.category === "block" ? raw : 0,
-    meetingWorkLoggedHours: classification.category === "meeting" ? raw : 0,
-    technicalWorkLoggedHours: classification.category === "technical" ? raw : 0,
-    versionWorkLoggedHours: classification.category === "version" ? raw : 0
+    productiveWorkLoggedHours: categoryHours("productive"),
+    blockWorkLoggedHours: categoryHours("block"),
+    meetingWorkLoggedHours: categoryHours("meeting"),
+    technicalWorkLoggedHours: categoryHours("technical"),
+    versionWorkLoggedHours: categoryHours("version")
   };
+  if (raw === null) {
+    row.technicalVersionWorkLoggedHours = null;
+    row.nonProductiveWorkLoggedHours = null;
+    row.rawProductiveWorkLoggedHours = null;
+    row.safeProductiveWorkLoggedHours = null;
+    return row;
+  }
   row.technicalVersionWorkLoggedHours = row.technicalWorkLoggedHours + row.versionWorkLoggedHours;
   row.nonProductiveWorkLoggedHours = row.blockWorkLoggedHours + row.meetingWorkLoggedHours + row.technicalWorkLoggedHours + row.versionWorkLoggedHours;
   row.rawProductiveWorkLoggedHours = row.rawWorkLoggedHours - row.nonProductiveWorkLoggedHours;
@@ -183,18 +235,23 @@ function issueBreakdown(issue, sourceColumn, categoryMapping) {
 }
 
 function finalizeBreakdown(rows, meta) {
-  const totals = rows.reduce((acc, row) => {
-    acc.rawWorkLoggedHours += row.rawWorkLoggedHours;
-    acc.productiveWorkLoggedHours += row.productiveWorkLoggedHours;
-    acc.blockWorkLoggedHours += row.blockWorkLoggedHours;
-    acc.meetingWorkLoggedHours += row.meetingWorkLoggedHours;
-    acc.technicalWorkLoggedHours += row.technicalWorkLoggedHours;
-    acc.versionWorkLoggedHours += row.versionWorkLoggedHours;
-    return acc;
-  }, emptyTotals());
-  totals.technicalVersionWorkLoggedHours = totals.technicalWorkLoggedHours + totals.versionWorkLoggedHours;
-  totals.nonProductiveWorkLoggedHours = totals.blockWorkLoggedHours + totals.meetingWorkLoggedHours + totals.technicalWorkLoggedHours + totals.versionWorkLoggedHours;
-  totals.reconciliationDifference = totals.rawWorkLoggedHours - (totals.productiveWorkLoggedHours + totals.blockWorkLoggedHours + totals.meetingWorkLoggedHours + totals.technicalWorkLoggedHours + totals.versionWorkLoggedHours);
+  const totals = rows.length ? {
+    rawWorkLoggedHours: sumRecorded(rows.map((row) => row.rawWorkLoggedHours)),
+    productiveWorkLoggedHours: sumRecorded(rows.map((row) => row.productiveWorkLoggedHours)),
+    blockWorkLoggedHours: sumRecorded(rows.map((row) => row.blockWorkLoggedHours)),
+    meetingWorkLoggedHours: sumRecorded(rows.map((row) => row.meetingWorkLoggedHours)),
+    technicalWorkLoggedHours: sumRecorded(rows.map((row) => row.technicalWorkLoggedHours)),
+    versionWorkLoggedHours: sumRecorded(rows.map((row) => row.versionWorkLoggedHours))
+  } : emptyTotals();
+  if (!Number.isFinite(totals.rawWorkLoggedHours)) {
+    totals.technicalVersionWorkLoggedHours = null;
+    totals.nonProductiveWorkLoggedHours = null;
+    totals.reconciliationDifference = null;
+  } else {
+    totals.technicalVersionWorkLoggedHours = totals.technicalWorkLoggedHours + totals.versionWorkLoggedHours;
+    totals.nonProductiveWorkLoggedHours = totals.blockWorkLoggedHours + totals.meetingWorkLoggedHours + totals.technicalWorkLoggedHours + totals.versionWorkLoggedHours;
+    totals.reconciliationDifference = totals.rawWorkLoggedHours - (totals.productiveWorkLoggedHours + totals.blockWorkLoggedHours + totals.meetingWorkLoggedHours + totals.technicalWorkLoggedHours + totals.versionWorkLoggedHours);
+  }
   return {
     ...meta,
     rows,
@@ -252,14 +309,46 @@ function uniqueNormalized(values) {
   return [...new Set(values.map((value) => normalizeString(value)).filter(Boolean))];
 }
 
+function countHourStates(rows) {
+  return rows.reduce((population, row) => {
+    if (row.hoursState === "recorded") population.recorded += 1;
+    else if (row.hoursState === "rejected") population.rejected += 1;
+    else population.blank += 1;
+    return population;
+  }, { recorded: 0, blank: 0, rejected: 0 });
+}
+
+function partialWorkLogMessage(population) {
+  return `جمع Work Log فقط ${population.recorded} مقدار عددی ثبت‌شده را شامل می‌شود. ${population.blank} سلول خالی و ${population.rejected} مقدار نامعتبر صفر حساب نشده‌اند. این جمع ممکن است کل واقعی نباشد.`;
+}
+
+function finiteHours(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function sumRecorded(values) {
+  let total = 0;
+  let seen = false;
+  values.forEach((value) => {
+    if (!Number.isFinite(value)) return;
+    total += value;
+    seen = true;
+  });
+  return seen ? total : null;
+}
+
+function columnIsAbsent(issues, column) {
+  return Boolean(column) && (issues || []).length > 0 && !(issues || []).some((issue) => issue?.raw && Object.hasOwn(issue.raw, column));
+}
+
 function getMeta(issue, columnName) {
   return issue.raw?.__cellMeta?.[columnName] || {};
 }
 
 function detectUnit(meta, rawValue) {
-  const format = String(meta?.format || "");
+  const format = String(meta?.format || meta?.z || "");
   if (/\[h\]/i.test(format)) return "Excel duration [h]:mm";
-  if (typeof rawValue === "number" && rawValue > 0 && rawValue < 1) return "Excel day fraction";
+  if (isExcelDurationFormat(format)) return "Excel duration";
   if (typeof rawValue === "number") return "Numeric hours/serial duration";
   if (rawValue instanceof Date) return "JavaScript Date duration";
   if (normalizeString(rawValue)) return "Text duration";

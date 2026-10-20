@@ -36,5 +36,39 @@ test("HotFix normalization", () => equal(normalizeLabels("HotFix").includes("hot
 test("Contact Point alias mapping", () => equal(buildHeaderMap(["Contact Point"], FIELD_ALIASES).qaOwner, "Contact Point"));
 test("Content Point alias mapping", () => equal(buildHeaderMap(["Content Point"], FIELD_ALIASES).qaOwner, "Content Point"));
 test("Mojibake Sigma header alias mapping", () => equal(buildHeaderMap([mojibakeUtf8("Σ Time Spent")], FIELD_ALIASES).totalWorkLogged, mojibakeUtf8("Σ Time Spent")));
-test("0.0416666667 Excel day = 1 hour", () => close(normalizePossibleExcelHours(0.0416666667).hours, 1));
-test("0.125 Excel day = 3 hours", () => close(normalizePossibleExcelHours(0.125).hours, 3));
+test("Ordinary fractional hours stay fractional", () => {
+  close(normalizePossibleExcelHours(0.0416666667).hours, 0.0416666667);
+  close(normalizePossibleExcelHours(0.125).hours, 0.125);
+  equal(normalizePossibleExcelHours(0).hours, 0);
+  equal(normalizePossibleExcelHours(10).hours, 10);
+});
+test("Verified Excel duration format converts a day fraction", () => {
+  close(normalizePossibleExcelHours(0.0416666667, { format: "[h]:mm:ss" }).hours, 1);
+  close(normalizePossibleExcelHours(0.125, { z: "h:mm" }).hours, 3);
+});
+test("Excel Date duration metadata converts to hours", () => {
+  const threeHours = new Date(Date.UTC(1899, 11, 30) + 3 * 60 * 60 * 1000);
+  close(normalizePossibleExcelHours(threeHours).hours, 3);
+});
+test("Prefixed hex, binary, and octal text is rejected", () => {
+  equal(normalizeNumber("0x10"), null);
+  equal(normalizeNumber("0X10"), null);
+  equal(normalizeNumber(" 0x10 "), null);
+  equal(normalizeNumber("0b10"), null);
+  equal(normalizeNumber("0B10"), null);
+  equal(normalizeNumber("+0b1"), null);
+  equal(normalizeNumber("0o10"), null);
+  equal(normalizeNumber("0O7"), null);
+  equal(normalizeNumber("-0o10"), null);
+  equal(normalizeNumber("۰b۱۰"), null);
+  equal(normalizeNumber(16), 16);
+  equal(normalizeNumber("16"), 16);
+  equal(normalizeNumber("0"), 0);
+  equal(normalizeNumber("۰"), 0);
+  equal(normalizeNumber("010"), 10);
+  equal(normalizeNumber("۰۱۰"), 10);
+  equal(normalizeNumber("0.5"), 0.5);
+  equal(normalizeNumber("1,234.5"), 1234.5);
+  equal(normalizeNumber("12h"), null);
+  equal(normalizeNumber(""), null);
+});

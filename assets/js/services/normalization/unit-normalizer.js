@@ -15,6 +15,9 @@ export function normalizePossibleExcelHours(value, cellMeta = {}) {
   const number = normalizeNumber(value);
   if (number === null) return { raw: value, hours: null };
   const format = String(cellMeta.format || cellMeta.z || "");
-  const looksLikeDuration = /\[h\]|h+:?m+|m+:?s+/i.test(format);
-  return { raw: value, hours: looksLikeDuration || (number > 0 && number < 1) ? number * 24 : number };
+  return { raw: value, hours: isExcelDurationFormat(format) ? number * 24 : number };
+}
+
+export function isExcelDurationFormat(format) {
+  return /\[h\]|h+:?m+|m+:?s+/i.test(String(format || ""));
 }

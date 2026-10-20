@@ -1,6 +1,9 @@
 import { downloadText } from "../utils/helpers.js";
-import { KPI_LABELS } from "../utils/constants.js";
+import { CALCULATION_VERSION, KPI_LABELS } from "../utils/constants.js";
 import { isLegacyPublicationSnapshot, LEGACY_PUBLICATION_STATUS } from "./kpi-publication.js";
+import { calculateManagementMetrics, calculatePersonDashboards } from "./calculations/report-calculator.js";
+import { buildReconciliation } from "./reconciliation-service.js";
+import { refreshWorkLogQualityItems } from "./data-quality-service.js";
 
 export function exportJson(filename, data) {
   downloadText(filename, JSON.stringify(data, null, 2), "application/json");
@@ -19,7 +22,7 @@ export function exportCsv(filename, rows) {
   downloadText(filename, tableToCsv(rows), "text/csv;charset=utf-8");
 }
 
-export function exportXlsx(filename, sheets) {
+export function workbookFromSheets(sheets) {
   const xlsx = globalThis.XLSX;
   if (!xlsx) throw new Error("SheetJS برای خروجی Excel در دسترس نیست.");
   const workbook = xlsx.utils.book_new();
@@ -27,11 +30,58 @@ export function exportXlsx(filename, sheets) {
     const rows = sheet.rows?.length ? sheet.rows : [["پیام"], ["داده‌ای برای خروجی وجود ندارد."]];
     xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet(rows), safeSheetName(sheet.name));
   });
-  xlsx.writeFile(workbook, filename);
+  return workbook;
 }
 
-export function exportReportExcel(report) {
-  exportXlsx(reportExcelFilename(report), buildReportWorkbookSheets(report));
+export function exportXlsx(filename, sheets) {
+  globalThis.XLSX.writeFile(workbookFromSheets(sheets), filename);
+}
+
+export function exportReportExcel(report, options = {}) {
+  const identity = options.identityReport || report;
+  exportXlsx(reportExcelFilename(identity), savedReportWorkbookSheets(report, options));
+}
+
+export function savedReportWorkbookSheets(report, options = {}) {
+  const identity = options.identityReport || report;
+  const prepared = reportStateForExport(report);
+  const exported = {
+    ...prepared.report,
+    dataQuality: refreshWorkLogQualityItems(prepared.report.dataQuality, prepared.recalculated ? {
+      issues: prepared.report.normalizedData.issues,
+      personMappings: prepared.report.mappingSnapshot.personMappings,
+      workCategoryMapping: prepared.report.workCategoryMapping
+    } : null)
+  };
+  return buildReportWorkbookSheets(exported, {
+    kpiSource: prepared.recalculated ? "recalculated" : "stored",
+    identityReport: identity
+  });
+}
+
+function reportStateForExport(report) {
+  if (!Array.isArray(report?.normalizedData?.issues) || !Array.isArray(report?.mappingSnapshot?.personMappings)) {
+    return { report, recalculated: false };
+  }
+  const issues = report.normalizedData.issues;
+  const capacityPeople = report.normalizedData.capacityPeople || [];
+  const personMappings = report.mappingSnapshot.personMappings;
+  const management = calculateManagementMetrics(issues, capacityPeople, personMappings, report.workCategoryMapping);
+  const people = calculatePersonDashboards(issues, capacityPeople, personMappings, report.workCategoryMapping);
+  const calculatedMetrics = { management, people };
+  const reconciliation = buildReconciliation({
+    report: { teamName: report.teamName, sprintName: report.sprintName, calculatedMetrics, workCategoryMapping: report.workCategoryMapping },
+    issues,
+    capacityPeople,
+    personMappings,
+    fieldMappings: report.mappingSnapshot.fieldMappings,
+    fileMetadata: report.files,
+    dataQualityIssues: report.dataQuality
+  });
+  return {
+    recalculated: true,
+    report: { ...report, calculatedMetrics, reconciliation }
+  };
 }
 
 export function exportManagementExcel(report, filters = {}) {
@@ -46,13 +96,13 @@ export function exportDataQualityExcel(report, filters = {}) {
   exportXlsx(scopedExcelFilename(report, "data-quality"), buildDataQualityWorkbookSheets(report, filters));
 }
 
-export function buildReportWorkbookSheets(report) {
+export function buildReportWorkbookSheets(report, exportContext = {}) {
   const issues = report?.normalizedData?.issues || [];
   const people = report?.calculatedMetrics?.people || [];
   const management = report?.calculatedMetrics?.management || {};
   const quality = report?.dataQuality || [];
   return [
-    { name: "Summary", rows: buildSummaryRows(report, issues, people, quality) },
+    { name: "Summary", rows: buildSummaryRows(report, issues, people, quality, exportContext) },
     { name: "Management KPI", rows: buildMetricRows(management) },
     { name: "People KPI", rows: buildPeopleRows(people) },
     { name: "Issues", rows: buildIssueRows(issues) },
@@ -86,27 +136,35 @@ export function buildDataQualityWorkbookSheets(report, filters = {}) {
   ];
 }
 
-function buildSummaryRows(report, issues, people, quality) {
+function buildSummaryRows(report, issues, people, quality, exportContext = {}) {
+  const identity = exportContext.identityReport || report;
   const counts = quality.reduce((acc, item) => {
     acc[item.severity] = (acc[item.severity] || 0) + 1;
     return acc;
   }, { error: 0, warning: 0, info: 0 });
-  return [
+  const rows = [
     ["فیلد", "مقدار"],
-    ["تیم", report?.teamName || ""],
-    ["اسپرینت", report?.sprintName || ""],
-    ["از تاریخ", report?.dateFrom || ""],
-    ["تا تاریخ", report?.dateTo || ""],
-    ["تاریخ ایجاد", report?.createdAt || ""],
-    ["نسخه محاسبات", report?.calculationVersion || ""],
+    ["تیم", identity?.teamName || ""],
+    ["اسپرینت", identity?.sprintName || ""],
+    ["از تاریخ", identity?.dateFrom || ""],
+    ["تا تاریخ", identity?.dateTo || ""],
+    ["تاریخ ایجاد", identity?.createdAt || ""],
+    ["نسخه محاسبات", identity?.calculationVersion || ""],
     ["تعداد Issue", issues.length],
     ["تعداد افراد", people.length],
     ["خطاهای کیفیت داده", counts.error],
     ["هشدارهای کیفیت داده", counts.warning],
     ["اطلاعات کیفیت داده", counts.info],
     ["وضعیت ممیزی", report?.reconciliation?.reconciliationStatus || ""],
-    ["فراداده تعریف KPI", isLegacyPublicationSnapshot(report) ? LEGACY_PUBLICATION_STATUS : "در نسخه ذخیره‌شده موجود است"]
+    ["فراداده تعریف KPI", isLegacyPublicationSnapshot(identity) ? LEGACY_PUBLICATION_STATUS : "در نسخه ذخیره‌شده موجود است"]
   ];
+  if (exportContext.kpiSource === "recalculated") {
+    rows.push(["مبنای شاخص‌های KPI", `شاخص‌ها از مسائل ذخیره‌شده با نسخه ${CALCULATION_VERSION} دوباره محاسبه شده‌اند. نسخه ذخیره‌شده گزارش تغییر نکرده است.`]);
+  }
+  if (exportContext.kpiSource === "stored") {
+    rows.push(["مبنای شاخص‌های KPI", "داده ذخیره‌شده برای محاسبه مجدد کافی نیست. شاخص‌ها از نسخه ذخیره‌شده آمده‌اند و مقدار جاافتاده صفر نشده است."]);
+  }
+  return rows;
 }
 
 function buildFilterRows(report, filters) {

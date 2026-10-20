@@ -13,7 +13,7 @@ export function normalizeNumber(value) {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const normalized = normalizeDigits(value).replace(/,/g, "").trim();
-  if (normalized === "") return null;
+  if (normalized === "" || /^[+-]?0[xbo]/i.test(normalized)) return null;
   const number = Number(normalized);
   return Number.isFinite(number) ? number : null;
 }

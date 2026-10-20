@@ -133,6 +133,36 @@ test("Work logs: individual categorization uses mapped person column", () => {
   close(b.totals.meetingWorkLoggedHours, 2);
 });
 
+test("Work logs: a missing personal column does not become zero planned work", () => {
+  const person = calculatePersonDashboards(
+    [issue({ issueKey: "A-1", raw: 9, assignee: "Ahad", planType: "planned" })],
+    [{ id: "c1", capacityName: "احد", availableCapacity: 100, plannedCapacity: 80, unplannedCapacity: 20 }],
+    [{ jiraName: "Ahad", capacityName: "احد", capacityId: "c1", role: "developer", workLogColumn: "", enabled: true }],
+    mapping
+  )[0];
+  equal(person.metrics.rawWorkLogged.value, null);
+  equal(person.metrics.plannedProductiveWork.value, null);
+  equal(person.metrics.plannedProductiveWork.status, "unavailable");
+  equal(person.metrics.unplannedProductiveWork.value, null);
+  equal(person.metrics.plannedCapacityUtilization.value, null);
+  equal(person.metrics.unplannedCapacityUtilization.value, null);
+  equal(person.metrics.plannedIssueCount.value, 1);
+  equal(person.metrics.totalCapacity.value, 100);
+});
+
+test("Work logs: a genuine zero in a mapped column stays zero", () => {
+  const person = calculatePersonDashboards(
+    [issue({ issueKey: "Z-1", raw: 40, ali: 0, assignee: "Ali", planType: "planned", devEstimate: 4 })],
+    [{ id: "c1", capacityName: "Ali", availableCapacity: 10, plannedCapacity: 10, unplannedCapacity: 0 }],
+    [{ jiraName: "Ali", capacityName: "Ali", capacityId: "c1", role: "developer", workLogColumn: "AliLog", enabled: true }],
+    mapping
+  )[0];
+  equal(person.metrics.rawWorkLogged.value, 0);
+  equal(person.metrics.plannedProductiveWork.value, 0);
+  equal(person.metrics.plannedCapacityUtilization.value, 0);
+  equal(person.metrics.capacityUtilization.value, 40);
+});
+
 test("Work logs: a person without a work-log column does not receive the team total", () => {
   const breakdown = buildPersonWorkLogBreakdown([issue({ raw: 9 })], { jiraName: "Ahad", workLogColumn: "", enabled: true }, mapping);
   equal(breakdown.totals.rawWorkLoggedHours, 0);
@@ -190,7 +220,11 @@ test("Exports: CSV issue rows contain new work-log fields", () => {
   const b = buildManagementWorkLogBreakdown([issue({ raw: 4, labels: ["block"] })], [], {}, mapping);
   const row = issue({ raw: 4, labels: ["block"] });
   row.workLogCategoryBreakdown = b.rows[0];
-  const header = getIssueCsvRows([row])[0];
+  const [header, exported] = getIssueCsvRows([row]);
   ok(header.includes("Work Category"));
   ok(header.includes("Technical + Version Work Logged"));
+  equal(exported[0], "T-1");
+  equal(exported[1], "Build feature");
+  equal(exported[6], "block");
+  equal(exported[10], "۴");
 });

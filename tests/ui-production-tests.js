@@ -2,6 +2,7 @@ import { test, equal, ok } from "./test-helpers.js";
 import { applyIssueFilters } from "../assets/js/controllers/filter-controller.js";
 import { evaluateGenerateReadiness } from "../assets/js/views/upload-view.js";
 import { renderScrumDashboards } from "../assets/js/views/scrum-view.js";
+import { renderFilters } from "../assets/js/views/management-view.js";
 import { renderCharts, resizeCharts } from "../assets/js/views/chart-view.js";
 import { calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
 import { renderHistory } from "../assets/js/views/history-view.js";
@@ -176,6 +177,43 @@ test("Excel export: report workbook contains Persian summary and issue sheets", 
   ok(sheets.find((sheet) => sheet.name === "Issues").rows.flat().includes("جزئیات"));
 });
 
+test("Blocked chart note distinguishes an explicit zero from missing blocked time", () => {
+  const cleanup = mountFixture(`<p id="blockedChartNote"></p>`);
+  try {
+    renderCharts({ calculatedMetrics: { people: [], management: {} }, normalizedData: { issues: [{ issueKey: "Z-1", blockedHours: 0 }] } });
+    equal(document.getElementById("blockedChartNote").textContent, "زمان بلاک ثبت‌شده صفر است.");
+    renderCharts({ calculatedMetrics: { people: [], management: {} }, normalizedData: { issues: [{ issueKey: "B-1", blockedHours: null }] } });
+    equal(document.getElementById("blockedChartNote").textContent, "برای زمان بلاک داده‌ای وجود ندارد.");
+  } finally {
+    cleanup();
+  }
+});
+
+test("A saved person absent from the recalculated roster can be selected without a zero card", () => {
+  const cleanup = mountFixture(`<div id="filters"></div><div id="scrumDashboards"></div>`);
+  try {
+    const report = {
+      teamName: "Core",
+      sprintName: "26.1",
+      normalizedData: {
+        issues: [{ issueKey: "S-1", assignee: "Sara", qaOwner: "", planType: "planned", statusCanonical: "done", labels: [], workLogged: null, raw: {} }],
+        capacityPeople: []
+      },
+      mappingSnapshot: { personMappings: [], fieldMappings: {} },
+      calculatedMetrics: { people: [{ name: "Sara", role: "developer", metrics: { rawWorkLogged: { value: 0, displayValue: "۰h" } } }] }
+    };
+    renderFilters([report], report);
+    ok([...document.querySelectorAll("#personFilter option")].some((option) => option.value === "Sara"));
+    const people = calculatePersonDashboards(report.normalizedData.issues, [], []);
+    equal(people.length, 0);
+    equal(applyIssueFilters(report, { person: "Sara" }).length, 1);
+    renderScrumDashboards(people);
+    ok(document.getElementById("scrumDashboards").textContent.includes("داشبورد فردی موجود نیست"));
+  } finally {
+    cleanup();
+  }
+});
+
 test("Report history view exposes open and Excel export actions", () => {
   const cleanup = mountFixture(`<div id="historyList"></div>`);
   try {
@@ -267,6 +305,44 @@ test("Report storage: a failed Postgres save is identified as browser-only", asy
   } finally {
     globalThis.fetch = oldFetch;
     resetReportApiProbe();
+  }
+});
+
+test("Non-finite chart values stay gaps while finite fractions stay numbers", () => {
+  const cleanup = mountFixture(`<section id="management" class="page-section active"><div class="chart-grid">
+    <div class="chart-panel"><canvas id="capacityChart"></canvas></div>
+    <div class="chart-panel"><canvas id="workMixChart"></canvas></div>
+    <div class="chart-panel"><canvas id="deliveryChart"></canvas></div>
+    <div class="chart-panel"><canvas id="qaChart"></canvas></div>
+    <div class="chart-slot"><div class="chart-panel"><canvas id="blockedChart"></canvas></div><p id="blockedChartNote"></p></div>
+  </div></section>`);
+  try {
+    renderCharts({
+      calculatedMetrics: {
+        people: [
+          { name: "A", metrics: { capacityUtilization: { value: Infinity }, deliveryRate: { value: 0 } } },
+          { name: "B", metrics: { capacityUtilization: { value: null }, deliveryRate: { value: null } } }
+        ],
+        management: { workMix: { planned: 0.5, unplanned: Infinity, carry_over: null }, qaReturnRate: { value: NaN }, firstPassRate: { value: 0 } }
+      },
+      normalizedData: { issues: [{ issueKey: "B-1", blockedHours: Infinity }, { issueKey: "B-2", blockedHours: 2 }] }
+    });
+    const capacity = window.Chart.getChart(document.getElementById("capacityChart")).data.datasets[0].data;
+    equal(capacity[0], null);
+    equal(capacity[1], null);
+    const delivery = window.Chart.getChart(document.getElementById("deliveryChart")).data.datasets[0].data;
+    equal(delivery[0], 0);
+    equal(delivery[1], null);
+    const mix = window.Chart.getChart(document.getElementById("workMixChart")).data.datasets[0].data;
+    equal(mix[0], 0.5);
+    equal(mix[1], null);
+    equal(mix[2], null);
+    const qa = window.Chart.getChart(document.getElementById("qaChart")).data.datasets[0].data;
+    equal(qa[0], null);
+    equal(qa[1], 0);
+    equal(window.Chart.getChart(document.getElementById("blockedChart")).data.datasets[0].data[0], 2);
+  } finally {
+    cleanup();
   }
 });
 

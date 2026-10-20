@@ -1,7 +1,7 @@
 import { FIELD_ALIASES } from "../config/field-aliases.js";
 import { CALCULATION_VERSION } from "../utils/constants.js";
 import { comparable, normalizeString } from "./normalization/string-normalizer.js";
-import { normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
+import { isExcelDurationFormat, normalizePossibleExcelHours } from "./normalization/unit-normalizer.js";
 import { sum, average } from "./calculations/time-calculator.js";
 import { buildManagementWorkLogBreakdown, buildPersonWorkLogBreakdown, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
 
@@ -197,13 +197,13 @@ function buildWorkLogReconciliation(context) {
       const meta = getMeta(issue, mapping.workLogColumn);
       return { person: mapping.jiraName, column: mapping.workLogColumn, rawValue: issue.raw?.[mapping.workLogColumn], cellType: meta.type || "", format: meta.format || "", normalizedHours: normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], meta).hours };
     });
-    const mappedTotal = sum(personValues.map((value) => value.normalizedHours || 0));
-    const managementTotal = source.hours || 0;
+    const mappedTotal = sumRecorded(personValues.map((value) => value.normalizedHours));
+    const managementTotal = recordedHours(source.hours);
     return {
       issueKey: issue.issueKey,
       managementTotalWorkLog: managementTotal,
       sumOfMappedPersonColumns: mappedTotal,
-      residual: managementTotal - mappedTotal,
+      residual: recordedDifference(managementTotal, mappedTotal),
       sourceColumnUsed: sourceColumn,
       rawSourceValue: issue.raw?.[sourceColumn],
       cellType: sourceMeta.type || "",
@@ -213,9 +213,9 @@ function buildWorkLogReconciliation(context) {
       personValues
     };
   });
-  const managementTotal = sum(rows.map((row) => row.managementTotalWorkLog));
-  const mappedIndividualTotal = sum(rows.map((row) => row.sumOfMappedPersonColumns));
-  const residualTotal = managementTotal - mappedIndividualTotal;
+  const managementTotal = sumRecorded(rows.map((row) => row.managementTotalWorkLog));
+  const mappedIndividualTotal = sumRecorded(rows.map((row) => row.sumOfMappedPersonColumns));
+  const residualTotal = recordedDifference(managementTotal, mappedIndividualTotal);
   return {
     sourceColumn,
     rows,
@@ -223,15 +223,16 @@ function buildWorkLogReconciliation(context) {
       managementWorkLogged: managementTotal,
       mappedIndividualWorkLogged: mappedIndividualTotal,
       residualWorkLogged: residualTotal,
-      classification: Math.abs(residualTotal) > TOLERANCE ? "Unallocated / Other Users Work Logged" : "reconciled"
+      classification: !Number.isFinite(residualTotal) ? "unavailable" : Math.abs(residualTotal) > TOLERANCE ? "Unallocated / Other Users Work Logged" : "reconciled"
     }
   };
 }
 
 function buildBlockedTimeDistribution(context) {
-  const rows = context.issues.map((issue) => {
-    const meta = getMeta(issue, context.fieldMappings.blockedTime || "Time in block");
-    const rawValue = issue.raw?.[context.fieldMappings.blockedTime || "Time in block"];
+  const column = context.fieldMappings.blockedTime || "Time in block";
+  const measured = context.issues.map((issue) => {
+    const meta = getMeta(issue, column);
+    const rawValue = issue.raw?.[column];
     const unit = detectUnit(meta, rawValue);
     return {
       issueKey: issue.issueKey,
@@ -243,14 +244,26 @@ function buildBlockedTimeDistribution(context) {
       cellNumberFormat: meta.format || "",
       parsedSerialValue: typeof rawValue === "number" ? rawValue : null,
       detectedDurationUnit: unit.label,
-      normalizedHours: issue.blockedHours || 0,
+      normalizedHours: Number.isFinite(issue.blockedHours) ? issue.blockedHours : null,
       leadTimeHours: issue.leadTimeHours,
       cycleTimeHours: issue.cycleTimeHours
     };
-  }).filter((row) => row.normalizedHours !== 0);
+  });
+  const finite = measured.filter((row) => Number.isFinite(row.normalizedHours));
+  const rows = finite.filter((row) => row.normalizedHours !== 0);
   const values = rows.map((row) => row.normalizedHours).sort((a, b) => a - b);
-  const total = sum(values);
-  const distribution = { count: values.length, minimum: values[0] || 0, median: percentile(values, 0.5), average: average(values), p90: percentile(values, 0.9), p95: percentile(values, 0.95), maximum: values.at(-1) || 0, total };
+  const onlyZero = finite.length > 0 && values.length === 0;
+  const total = finite.length ? sum(finite.map((row) => row.normalizedHours)) : null;
+  const distribution = {
+    count: values.length,
+    minimum: values.length ? values[0] : (onlyZero ? 0 : null),
+    median: values.length ? percentile(values, 0.5) : (onlyZero ? 0 : null),
+    average: values.length ? average(values) : (onlyZero ? 0 : null),
+    p90: values.length ? percentile(values, 0.9) : (onlyZero ? 0 : null),
+    p95: values.length ? percentile(values, 0.95) : (onlyZero ? 0 : null),
+    maximum: values.length ? values.at(-1) : (onlyZero ? 0 : null),
+    total
+  };
   const top20 = [...rows].sort((a, b) => b.normalizedHours - a.normalizedHours).slice(0, 20).map((row) => ({ ...row, percentOfTotal: total ? row.normalizedHours / total * 100 : null }));
   const warnings = buildBlockedTimeWarnings(context.issues);
   return { rows, distribution, top20, warnings, conclusion: "Source cells are Excel duration values using [h]:mm; conversion is serial day fraction * 24 hours." };
@@ -322,7 +335,7 @@ function buildWorkLogCategoryReconciliation(context) {
     { field: "Non-Productive Work Logged", hours: totals.nonProductiveWorkLoggedHours },
     { field: "Reconciliation Difference", hours: totals.reconciliationDifference }
   ];
-  const errors = Math.abs(totals.reconciliationDifference) > TOLERANCE ? [{ code: "WORK_LOG_CATEGORY_RECONCILIATION_DIFF", difference: totals.reconciliationDifference, tolerance: TOLERANCE }] : [];
+  const errors = Number.isFinite(totals.reconciliationDifference) && Math.abs(totals.reconciliationDifference) > TOLERANCE ? [{ code: "WORK_LOG_CATEGORY_RECONCILIATION_DIFF", difference: totals.reconciliationDifference, tolerance: TOLERANCE }] : [];
   return {
     rows,
     totals,
@@ -344,7 +357,7 @@ function buildDrillDown(context, estimate, workLog, blocked) {
   const planning = context.report?.calculatedMetrics?.management?.planningDrillDown || {};
   const kpiJson = context.report?.calculatedMetrics?.management?.kpiJson || {};
   return {
-    capacityUtilization: drill("Capacity Utilization", "(Planned Dev + Unplanned Dev + Planned Test + Unplanned Test) / Total Available Capacity * 100", byPlan.planned.totalEstimate + byPlan.unplanned.totalEstimate, context.report?.calculatedMetrics?.management?.totalCapacity || null, [...byPlan.planned.issueKeys, ...byPlan.unplanned.issueKeys], ["Carry Over excluded from Capacity Utilization"], now),
+    capacityUtilization: drill("Capacity Utilization", "(Planned Dev + Unplanned Dev + Planned Test + Unplanned Test) / Total Available Capacity * 100", byPlan.planned.totalEstimate + byPlan.unplanned.totalEstimate, context.report?.calculatedMetrics?.management?.totalCapacity ?? null, [...byPlan.planned.issueKeys, ...byPlan.unplanned.issueKeys], ["Carry Over excluded from Capacity Utilization"], now),
     totalPlannedIssueCount: issueDrill("Total Planned Issue Count", "Distinct planned issue keys.", planning.plannedIssueKeys || [], now),
     totalStartedPlannedIssueCount: issueDrill("Total Started Planned Issue Count", "Distinct planned issue keys that reached In Progress or later.", planning.startedPlannedIssueKeys || [], now, kpiJson.startedPlannedIssueCount),
     totalUnplannedIssueCount: issueDrill("Total Unplanned Issue Count", "Distinct unplanned issue keys.", planning.unplannedIssueKeys || [], now),
@@ -431,7 +444,27 @@ function selectManagementWorkLogColumn(context) {
 
 function sumPersonWork(issues, mapping) {
   if (!mapping.workLogColumn) return null;
-  return sum(issues.map((issue) => normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], getMeta(issue, mapping.workLogColumn)).hours || 0));
+  return sumRecorded(issues.map((issue) => recordedHours(normalizePossibleExcelHours(issue.raw?.[mapping.workLogColumn], getMeta(issue, mapping.workLogColumn)).hours)));
+}
+
+function recordedHours(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function sumRecorded(values) {
+  let total = 0;
+  let seen = false;
+  values.forEach((value) => {
+    if (!Number.isFinite(value)) return;
+    total += value;
+    seen = true;
+  });
+  return seen ? total : null;
+}
+
+function recordedDifference(left, right) {
+  if (!Number.isFinite(left) && !Number.isFinite(right)) return null;
+  return (Number.isFinite(left) ? left : 0) - (Number.isFinite(right) ? right : 0);
 }
 
 function personSet(mappings, role) {
@@ -463,9 +496,9 @@ function getMeta(issue, columnName) {
 }
 
 function detectUnit(meta, rawValue) {
-  const format = String(meta.format || "");
+  const format = String(meta.format || meta.z || "");
   if (/\[h\]/i.test(format)) return { unit: "excel-duration", label: "Excel duration [h]:mm" };
-  if (typeof rawValue === "number" && rawValue > 0 && rawValue < 1) return { unit: "excel-day-fraction", label: "Excel day fraction" };
+  if (isExcelDurationFormat(format)) return { unit: "excel-duration", label: "Excel duration" };
   if (typeof rawValue === "number") return { unit: "hours-or-serial", label: "Numeric hours/serial duration" };
   if (rawValue instanceof Date) return { unit: "javascript-date", label: "JavaScript Date duration" };
   if (normalizeString(rawValue)) return { unit: "text", label: "Text duration" };

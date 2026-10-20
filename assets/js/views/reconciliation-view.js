@@ -20,7 +20,7 @@ export function renderReconciliation(reconciliation) {
     ${table(reconciliation.workLogCategoryReconciliation?.rows || [])}
     <h3>Person Work Log Breakdown</h3>
     ${table((reconciliation.workLogCategoryReconciliation?.personBreakdowns || []).map((row) => {
-      const hours = (value) => row.sourceMissing ? "N/A" : value;
+      const hours = (value) => row.sourceMissing || !Number.isFinite(value) ? "N/A" : value;
       return { person: row.person, raw: hours(row.totals.rawWorkLoggedHours), productive: hours(row.totals.productiveWorkLoggedHours), block: hours(row.totals.blockWorkLoggedHours), meeting: hours(row.totals.meetingWorkLoggedHours), technical: hours(row.totals.technicalWorkLoggedHours), version: hours(row.totals.versionWorkLoggedHours), technicalVersion: hours(row.totals.technicalVersionWorkLoggedHours), nonProductive: hours(row.totals.nonProductiveWorkLoggedHours), reconciliationDifference: hours(row.totals.reconciliationDifference) };
     }))}
     <h3>Work Log Breakdown Table</h3>

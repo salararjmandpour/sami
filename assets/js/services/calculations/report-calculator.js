@@ -34,6 +34,11 @@ function sumPresent(values) {
   return present.length ? sum(present) : null;
 }
 
+function sumFiniteOrNull(values) {
+  if (values.some((value) => typeof value === "number" && !Number.isFinite(value))) return null;
+  return sumPresent(values);
+}
+
 function issueKeys(issues) {
   return distinctIssues(issues).map((issue) => issue.issueKey);
 }
@@ -59,12 +64,29 @@ function drillRows(issues, breakdown, mapping = null) {
       currentStatus: issue.status,
       hasReachedInProgress: hasReachedInProgress(issue),
       startDetectionSource: startDetectionSource(issue),
-      productiveWorkLogged: row.productiveWorkLoggedHours || 0,
-      nonProductiveWorkLogged: row.nonProductiveWorkLoggedHours || 0,
+      productiveWorkLogged: drillWorkHours(breakdown, row, "productiveWorkLoggedHours"),
+      nonProductiveWorkLogged: drillWorkHours(breakdown, row, "nonProductiveWorkLoggedHours"),
       devEstimate: issue.devEstimate || 0,
       testEstimate: issue.testEstimate || 0
     };
   });
+}
+
+function drillWorkHours(breakdown, row, key) {
+  if (breakdown?.sourceMissing) return null;
+  if (!Object.hasOwn(row, key)) return null;
+  return Number.isFinite(row[key]) ? row[key] : null;
+}
+
+function sumPlanHours(rows, field) {
+  if (!rows.length) return 0;
+  const present = rows.map((row) => row[field]).filter((value) => Number.isFinite(value));
+  return present.length ? sum(present) : null;
+}
+
+function workLogUtilization(workload, capacity) {
+  if (!Number.isFinite(workload)) return null;
+  return capacityUtilization(workload, capacity);
 }
 
 function displayPlanType(planType) {
@@ -79,8 +101,8 @@ function kpiJson(kpiName, definition, result, unit, evaluatedIssues, includedIss
   return {
     kpiName,
     definition,
-    result,
-    displayValue: result === null || result === undefined || Number.isNaN(result) ? "N/A" : String(result),
+    result: Number.isFinite(result) ? result : null,
+    displayValue: Number.isFinite(result) ? String(result) : "N/A",
     unit,
     evaluatedIssueCount: distinctIssues(evaluatedIssues).length,
     includedIssueCount: includedIssueKeys.length,
@@ -126,8 +148,8 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
   const startedUnplanned = startedIssues(unplannedIssues);
   const plannedProductiveRows = productiveRowsForPlan(workLogBreakdown, "planned");
   const unplannedProductiveRows = productiveRowsForPlan(workLogBreakdown, "unplanned");
-  const plannedProductiveWork = sum(plannedProductiveRows.map((row) => row.productiveWorkLoggedHours || 0));
-  const unplannedProductiveWork = sum(unplannedProductiveRows.map((row) => row.productiveWorkLoggedHours || 0));
+  const plannedProductiveWork = sumPlanHours(plannedProductiveRows, "productiveWorkLoggedHours");
+  const unplannedProductiveWork = sumPlanHours(unplannedProductiveRows, "productiveWorkLoggedHours");
   const completedWithStoryPoints = issues.filter((issue) => issue.statusCanonical === "done" && Number.isFinite(issue.storyPoints));
   const averageStorySize = completedWithStoryPoints.length ? sum(completedWithStoryPoints.map((issue) => issue.storyPoints)) / completedWithStoryPoints.length : null;
   console.group?.("KPI Calculations");
@@ -146,8 +168,8 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
     unplannedStartRate: metric(ratio(startedUnplanned.length, unplannedIssues.length), "%"),
     plannedProductiveWork: metric(plannedProductiveWork, "h"),
     unplannedProductiveWork: metric(unplannedProductiveWork, "h"),
-    plannedCapacityUtilization: metric(capacityUtilization(plannedProductiveWork, totalPlannedCapacity), "%"),
-    unplannedCapacityUtilization: metric(capacityUtilization(unplannedProductiveWork, totalUnplannedCapacity), "%"),
+    plannedCapacityUtilization: metric(workLogUtilization(plannedProductiveWork, totalPlannedCapacity), "%"),
+    unplannedCapacityUtilization: metric(workLogUtilization(unplannedProductiveWork, totalUnplannedCapacity), "%"),
     plannedWork: metric(mix.plannedPercent, "%", "", { hours: mix.planned }),
     unplannedWork: metric(mix.unplannedPercent, "%", "", { hours: mix.unplanned }),
     carryOver: metric(mix.carry_over, "h"),
@@ -194,7 +216,7 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
         kpiName: "Planned Capacity Utilization",
         numerator: plannedProductiveWork,
         denominator: totalPlannedCapacity,
-        result: capacityUtilization(plannedProductiveWork, totalPlannedCapacity),
+        result: workLogUtilization(plannedProductiveWork, totalPlannedCapacity),
         capacitySource: "capacity-file/fallback by person",
         includedIssueKeys: [...new Set(plannedProductiveRows.map((row) => row.issueKey))],
         excludedNonProductiveIssueKeys: [...new Set((workLogBreakdown.rows || []).filter((row) => row.planType === "planned" && row.workCategory !== "productive").map((row) => row.issueKey))]
@@ -203,13 +225,13 @@ export function calculateManagementMetrics(issues, capacityPeople, mappings, wor
         kpiName: "Unplanned Capacity Utilization",
         numerator: unplannedProductiveWork,
         denominator: totalUnplannedCapacity,
-        result: capacityUtilization(unplannedProductiveWork, totalUnplannedCapacity),
+        result: workLogUtilization(unplannedProductiveWork, totalUnplannedCapacity),
         capacitySource: "capacity-file/fallback by person",
         includedIssueKeys: [...new Set(unplannedProductiveRows.map((row) => row.issueKey))],
         excludedNonProductiveIssueKeys: [...new Set((workLogBreakdown.rows || []).filter((row) => row.planType === "unplanned" && row.workCategory !== "productive").map((row) => row.issueKey))]
       }
     },
-    totalCapacity: devCapacity + qaCapacity,
+    totalCapacity: sumFiniteOrNull([devCapacity, qaCapacity]),
     totalWorkLogged: workLogged,
     productiveEstimatedHours: productiveEstimated,
     workLogBreakdown
@@ -235,18 +257,21 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
     const workLogBreakdown = buildPersonWorkLogBreakdown(issues, mapping, workCategoryMapping);
     const relatedWorkLogBreakdown = buildPersonWorkLogBreakdown(related, mapping, workCategoryMapping);
     const missingWorkLogReason = "ستون Work Log این فرد در فایل Jira وجود ندارد؛ این مقدار ساعت ثبت‌شده نیست.";
-    const loggedMetric = (value) => workLogBreakdown.sourceMissing ? metric(null, "h", missingWorkLogReason) : metric(value, "h");
+    const incompleteWorkLogReason = "ساعت ثبت‌شده قابل خواندن نیست؛ سلول خالی یا مقدار نامعتبر صفر حساب نشده است.";
+    const workLogUnavailable = Boolean(workLogBreakdown.sourceMissing) || !Number.isFinite(workLogBreakdown.totals?.rawWorkLoggedHours);
+    const workLogReason = workLogBreakdown.sourceMissing ? missingWorkLogReason : incompleteWorkLogReason;
+    const loggedMetric = (value) => workLogUnavailable ? metric(null, "h", workLogReason) : metric(value, "h");
     const plannedIssues = distinctIssues(related.filter((issue) => issue.planType === "planned"));
     const unplannedIssues = distinctIssues(related.filter((issue) => issue.planType === "unplanned"));
     const startedPlanned = startedIssues(plannedIssues);
     const startedUnplanned = startedIssues(unplannedIssues);
     const plannedProductiveRows = productiveRowsForPlan(relatedWorkLogBreakdown, "planned");
     const unplannedProductiveRows = productiveRowsForPlan(relatedWorkLogBreakdown, "unplanned");
-    const plannedProductiveWork = sum(plannedProductiveRows.map((row) => row.productiveWorkLoggedHours || 0));
-    const unplannedProductiveWork = sum(unplannedProductiveRows.map((row) => row.productiveWorkLoggedHours || 0));
-    const carryOverLoggedRows = role === "developer" ? workLogBreakdown.rows.filter((row) => row.planType === "carry_over" && row.rawWorkLoggedHours !== 0) : [];
-    const carryOverWorkLogged = sum(carryOverLoggedRows.map((row) => row.rawWorkLoggedHours || 0));
-    const carryOverProductiveWorkLogged = sum(carryOverLoggedRows.map((row) => row.productiveWorkLoggedHours || 0));
+    const plannedProductiveWork = sumPlanHours(plannedProductiveRows, "productiveWorkLoggedHours");
+    const unplannedProductiveWork = sumPlanHours(unplannedProductiveRows, "productiveWorkLoggedHours");
+    const carryOverLoggedRows = role === "developer" ? workLogBreakdown.rows.filter((row) => row.planType === "carry_over" && Number.isFinite(row.rawWorkLoggedHours) && row.rawWorkLoggedHours !== 0) : [];
+    const carryOverWorkLogged = sum(carryOverLoggedRows.map((row) => row.rawWorkLoggedHours));
+    const carryOverProductiveWorkLogged = sum(carryOverLoggedRows.map((row) => row.productiveWorkLoggedHours));
     const carryOverIssuesLogged = related.filter((issue) => carryOverLoggedRows.some((row) => comparable(row.issueKey) === comparable(issue.issueKey)));
     const workLogged = workLogBreakdown.totals.rawWorkLoggedHours;
     const qa = qaMetrics(related);
@@ -270,7 +295,7 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
             issueKey: issue.issueKey,
             summary: issue.summary,
             developer: mapping.jiraName,
-            developerWorkLogged: row.rawWorkLoggedHours || 0,
+            developerWorkLogged: row.rawWorkLoggedHours,
             currentStatus: issue.status,
             planType: "Carry Over"
           };
@@ -285,22 +310,22 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
           startedIssueCount: startedPlanned.length,
           issueKeys: issueKeys(plannedIssues),
           startedIssueKeys: issueKeys(startedPlanned),
-          productiveWorkLogged: plannedProductiveWork,
-          capacityUtilization: capacityUtilization(plannedProductiveWork, plannedCapacity),
-          capacityUtilizationReason: capacityUtilization(plannedProductiveWork, plannedCapacity) === null ? "N/A because planned capacity is zero, missing, or invalid" : ""
+          productiveWorkLogged: workLogUnavailable ? null : plannedProductiveWork,
+          capacityUtilization: workLogUnavailable ? null : capacityUtilization(plannedProductiveWork, plannedCapacity),
+          capacityUtilizationReason: workLogUnavailable || capacityUtilization(plannedProductiveWork, plannedCapacity) === null ? "N/A because planned capacity is zero, missing, or invalid" : ""
         },
         unplanned: {
           issueCount: unplannedIssues.length,
           startedIssueCount: startedUnplanned.length,
           issueKeys: issueKeys(unplannedIssues),
           startedIssueKeys: issueKeys(startedUnplanned),
-          productiveWorkLogged: unplannedProductiveWork,
-          capacityUtilization: capacityUtilization(unplannedProductiveWork, unplannedCapacity),
-          capacityUtilizationReason: capacityUtilization(unplannedProductiveWork, unplannedCapacity) === null ? "N/A because unplanned capacity is zero, missing, or invalid" : ""
+          productiveWorkLogged: workLogUnavailable ? null : unplannedProductiveWork,
+          capacityUtilization: workLogUnavailable ? null : capacityUtilization(unplannedProductiveWork, unplannedCapacity),
+          capacityUtilizationReason: workLogUnavailable || capacityUtilization(unplannedProductiveWork, unplannedCapacity) === null ? "N/A because unplanned capacity is zero, missing, or invalid" : ""
         },
         carryOver: {
           displayCountForDeveloper: role !== "developer",
-          workLogged: carryOverWorkLogged,
+          workLogged: workLogUnavailable ? null : carryOverWorkLogged,
           productiveWorkLogged: carryOverProductiveWorkLogged,
           loggedIssueKeys: carryOverLoggedRows.map((row) => row.issueKey)
         }
@@ -314,11 +339,11 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
         startedPlannedIssueCount: issueCountMetric(startedPlanned),
         unplannedIssueCount: issueCountMetric(unplannedIssues),
         startedUnplannedIssueCount: issueCountMetric(startedUnplanned),
-        plannedProductiveWork: metric(plannedProductiveWork, "h"),
-        unplannedProductiveWork: metric(unplannedProductiveWork, "h"),
-        plannedCapacityUtilization: metric(capacityUtilization(plannedProductiveWork, plannedCapacity), "%"),
-        unplannedCapacityUtilization: metric(capacityUtilization(unplannedProductiveWork, unplannedCapacity), "%"),
-        carryOverWorkLogged: workLogBreakdown.sourceMissing ? metric(null, "h", missingWorkLogReason) : metric(role === "developer" ? carryOverWorkLogged : null, "h"),
+        plannedProductiveWork: loggedMetric(plannedProductiveWork),
+        unplannedProductiveWork: loggedMetric(unplannedProductiveWork),
+        plannedCapacityUtilization: workLogUnavailable ? metric(null, "%", workLogReason) : metric(workLogUtilization(plannedProductiveWork, plannedCapacity), "%"),
+        unplannedCapacityUtilization: workLogUnavailable ? metric(null, "%", workLogReason) : metric(workLogUtilization(unplannedProductiveWork, unplannedCapacity), "%"),
+        carryOverWorkLogged: workLogUnavailable ? metric(null, "h", workLogReason) : metric(role === "developer" ? carryOverWorkLogged : null, "h"),
         plannedWork: metric(planned, "h"),
         unplannedWork: metric(unplanned, "h"),
         carryOver: metric(carry, "h"),
@@ -338,7 +363,7 @@ export function calculatePersonDashboards(issues, capacityPeople, mappings, work
         versionWorkLogged: loggedMetric(workLogBreakdown.totals.versionWorkLoggedHours),
         technicalVersionWorkLogged: loggedMetric(workLogBreakdown.totals.technicalVersionWorkLoggedHours),
         nonProductiveWorkLogged: loggedMetric(workLogBreakdown.totals.nonProductiveWorkLoggedHours),
-        estimationAccuracy: metric(estimationAccuracy(productiveEstimated, workLogBreakdown.totals.productiveWorkLoggedHours), "%", workLogBreakdown.sourceMissing ? missingWorkLogReason : "Productive Work Logged صفر یا خالی است.", {
+        estimationAccuracy: metric(estimationAccuracy(productiveEstimated, workLogBreakdown.totals.productiveWorkLoggedHours), "%", workLogUnavailable ? workLogReason : "Productive Work Logged صفر یا خالی است.", {
           productiveEstimatedHours: productiveEstimated,
           productiveWorkLoggedHours: workLogBreakdown.totals.productiveWorkLoggedHours,
           rawEstimatedHours: estimated,

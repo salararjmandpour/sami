@@ -8,12 +8,24 @@ export function totalUniqueCapacity(capacityPeople, mappings) {
 
 export function totalUniqueCapacityField(capacityPeople, mappings, field = "availableCapacity") {
   const used = new Set();
-  return mappings.filter((m) => m.enabled).reduce((total, mapping) => {
+  let total = 0;
+  let found = false;
+  let invalid = false;
+  for (const mapping of (mappings || []).filter((item) => item.enabled)) {
     const person = personCapacityRecord(capacityPeople, mapping);
-    if (!person || used.has(person.id) || !Number.isFinite(person[field])) return total;
+    if (!person || used.has(person.id)) continue;
+    const value = person[field];
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      invalid = true;
+      continue;
+    }
+    if (!Number.isFinite(value)) continue;
     used.add(person.id);
-    return total + person[field];
-  }, 0);
+    total += value;
+    found = true;
+  }
+  if (invalid) return Number.NaN;
+  return found ? total : null;
 }
 
 export function capacityUtilization(workload, capacity) {

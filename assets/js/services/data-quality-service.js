@@ -1,6 +1,6 @@
 import { REQUIRED_FIELDS } from "../utils/constants.js";
 import { buildBlockedTimeWarnings } from "./reconciliation-service.js";
-import { buildManagementWorkLogBreakdown, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
+import { buildManagementWorkLogBreakdown, buildPersonWorkLogValueWarnings, buildWorkLogQualityWarnings } from "./work-log-category-service.js";
 import { startDetectionSource } from "./normalization/status-normalizer.js";
 
 export function buildQualityReport({ jira, fieldMap, capacity, issues, personMappings = [], workCategoryMapping }) {
@@ -37,9 +37,7 @@ export function buildQualityReport({ jira, fieldMap, capacity, issues, personMap
   if (fieldMap?.doneDate && !(issues || []).some((row) => row.doneDate)) items.push(issue("warning", "Missing Done Date", "ستون تاریخ Done نگاشت شده است، اما هیچ مسئله‌ای تاریخ Done ندارد. Lead Time و Cycle Time قابل محاسبه نیستند."));
   if (fieldMap?.blockedTime && !(issues || []).some((row) => Number.isFinite(row.blockedHours))) items.push(issue("warning", "Missing Blocked Time", "ستون زمان بلاک نگاشت شده است، اما هیچ مقداری ندارد. زمان بلاک N/A است."));
   if (fieldMap?.issueType && !(issues || []).some((row) => row.issueType)) items.push(issue("info", "Missing Issue Type", "ستون نوع مسئله خالی است. شمارش Hotfix و Bug فقط از برچسب‌ها ممکن است."));
-  personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && !mapping.workLogColumn).forEach((mapping) => {
-    items.push(issue("warning", "Missing person work-log column", `${mapping.jiraName}: ستون Work Log برای این فرد در فایل Jira وجود ندارد. زمان ثبت‌شده فردی صفر می‌ماند و زمان کل تیم تقسیم نمی‌شود.`));
-  });
+  items.push(...unmappedPersonWorkLogWarnings(personMappings));
   const hasPersonWorkColumns = personMappings.some((mapping) => mapping.workLogColumn);
   if (!hasPersonWorkColumns && (issues || []).some((row) => row.planType === "carry_over" && row.workLogged > 0)) {
     items.push(issue("warning", "Carry-over issue has issue-level Work Logged but no per-person work-log allocation", "Developer carry-over logged time cannot be allocated without mapped person work-log columns."));
@@ -47,7 +45,40 @@ export function buildQualityReport({ jira, fieldMap, capacity, issues, personMap
   items.push(...buildBlockedTimeWarnings(issues || []));
   const workLogBreakdown = buildManagementWorkLogBreakdown(issues || [], personMappings, fieldMap, workCategoryMapping);
   items.push(...buildWorkLogQualityWarnings(workLogBreakdown));
+  items.push(...buildPersonWorkLogValueWarnings(issues || [], personMappings));
   return items;
+}
+
+export function unmappedPersonWorkLogWarnings(personMappings = []) {
+  return personMappings.filter((mapping) => mapping.enabled !== false && mapping.jiraName && !mapping.workLogColumn).map((mapping) => issue(
+    "warning",
+    "Missing person work-log column",
+    `${mapping.jiraName}: ستون Work Log این فرد نگاشت نشده یا در دسترس نیست. داده Work Log فردی ناموجود است و KPI مربوط N/A است. ساعت تیم به این فرد داده نمی‌شود.`
+  ));
+}
+
+const REPLACEABLE_WORK_LOG_CODES = new Set([
+  "Missing person work-log column",
+  "Missing team work-log column",
+  "Rejected work-log value",
+  "Work Logged unavailable",
+  "Partial Work Logged total",
+  "Non-productive issue with no Work Logged",
+  "Work Logged value with ambiguous unit",
+  "Multiple Work Categories Matched",
+  "Negative Productive Work Logged",
+  "Work Log reconciliation difference greater than 0.01"
+]);
+
+export function refreshWorkLogQualityItems(items, context) {
+  if (!Array.isArray(context?.issues) || !Array.isArray(context?.personMappings)) return items || [];
+  const breakdown = buildManagementWorkLogBreakdown(context.issues, context.personMappings, {}, context.workCategoryMapping);
+  const fresh = [
+    ...unmappedPersonWorkLogWarnings(context.personMappings),
+    ...buildWorkLogQualityWarnings(breakdown),
+    ...buildPersonWorkLogValueWarnings(context.issues, context.personMappings)
+  ];
+  return [...(items || []).filter((item) => !REPLACEABLE_WORK_LOG_CODES.has(item.code)), ...fresh];
 }
 
 export function issue(severity, code, message) {

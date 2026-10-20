@@ -1,6 +1,11 @@
-import { test, equal, close } from "./test-helpers.js";
+import { test, equal, close, ok } from "./test-helpers.js";
 import { calculateManagementMetrics, calculatePersonDashboards } from "../assets/js/services/calculations/report-calculator.js";
-import { totalUniqueCapacity } from "../assets/js/services/calculations/capacity-calculator.js";
+import { totalUniqueCapacity, totalUniqueCapacityField } from "../assets/js/services/calculations/capacity-calculator.js";
+import { timeVariance } from "../assets/js/services/calculations/estimation-calculator.js";
+import { formatNumber, metric } from "../assets/js/utils/formatters.js";
+import { buildReportWorkbookSheets } from "../assets/js/services/export-service.js";
+import { buildReconciliation } from "../assets/js/services/reconciliation-service.js";
+import { recalculateReportCopy } from "../assets/js/controllers/dashboard-controller.js";
 
 const issues = [
   { issueKeyComparable: "a", planType: "planned", statusCanonical: "done", devEstimate: 4, testEstimate: 2, workLogged: 5, labels: ["hotfix"], firstAutomationTest: "2026-01-01T00:00:00Z", qaReturned: false, leadTimeHours: 9, cycleTimeHours: 8, blockedHours: 1, assignee: "Dev A", qaOwner: "QA A", raw: { "Work A": 5 } },
@@ -117,3 +122,215 @@ test("Scrum overall capacity keeps a mapped person when the row has no capacity 
   close(totalUniqueCapacity(panelCapacity, devMappings), 252.4);
   close(totalUniqueCapacity(panelCapacity, qaMappings), 133.9);
 });
+
+test("Team capacity is unavailable when no finite capacity exists", () => {
+  const people = [{ id: "a", capacityName: "A", availableCapacity: null, plannedCapacity: null, unplannedCapacity: null }];
+  const personMappings = [{ enabled: true, jiraName: "A", capacityName: "A", role: "developer", workLogColumn: "" }];
+  equal(totalUniqueCapacityField(people, personMappings, "plannedCapacity"), null);
+  const metrics = calculateManagementMetrics([], people, personMappings);
+  equal(metrics.totalPlannedCapacity.value, null);
+  equal(metrics.totalPlannedCapacity.displayValue, "N/A");
+  equal(metrics.totalUnplannedCapacity.value, null);
+  equal(metrics.capacityUtilization.value, null);
+  equal(metrics.totalCapacity, null);
+  const stored = JSON.parse(JSON.stringify(metrics));
+  equal(stored.totalCapacity, null);
+  equal(stored.totalPlannedCapacity.value, null);
+  equal(stored.timeVariance.value, null);
+  equal(stored.timeVariance.displayValue, "N/A");
+  equal(formatNumber(stored.timeVariance.value), "N/A");
+  equal(stored.totalPlannedCapacity.value === 0, false);
+  equal(stored.timeVariance.value === 0, false);
+});
+
+test("Unavailable values stay null when a saved report is reopened", () => {
+  const saved = {
+    teamName: "تیم",
+    sprintName: "نمونه",
+    normalizedData: {
+      issues: [{ issueKey: "M-1", issueKeyComparable: "m-1", planType: "planned", statusCanonical: "done", workLogged: null, devEstimate: null, testEstimate: null, labels: [], raw: {} }],
+      capacityPeople: [{ id: "a", capacityName: "A", availableCapacity: null, plannedCapacity: null, unplannedCapacity: null }]
+    },
+    mappingSnapshot: { personMappings: [{ enabled: true, jiraName: "A", capacityName: "A", role: "developer", workLogColumn: "" }], fieldMappings: {} },
+    files: {},
+    dataQuality: []
+  };
+  const reopened = JSON.parse(JSON.stringify(recalculateReportCopy(saved)));
+  equal(reopened.calculatedMetrics.management.timeVariance.value, null);
+  equal(reopened.calculatedMetrics.management.timeVariance.displayValue, "N/A");
+  equal(reopened.calculatedMetrics.management.totalPlannedCapacity.value, null);
+  equal(reopened.calculatedMetrics.management.totalCapacity, null);
+  equal(reopened.id === saved.id, false);
+});
+
+test("Team capacity keeps a genuine zero and sums only finite values", () => {
+  const people = [
+    { id: "a", capacityName: "A", availableCapacity: 10, plannedCapacity: 0, unplannedCapacity: 4 },
+    { id: "b", capacityName: "B", availableCapacity: null, plannedCapacity: null, unplannedCapacity: 6 }
+  ];
+  const personMappings = [
+    { enabled: true, jiraName: "A", capacityName: "A", role: "developer", workLogColumn: "" },
+    { enabled: true, jiraName: "A", capacityName: "A", role: "developer", workLogColumn: "" },
+    { enabled: true, jiraName: "B", capacityName: "B", role: "qa", workLogColumn: "" }
+  ];
+  equal(totalUniqueCapacity(people, personMappings), 10);
+  equal(totalUniqueCapacityField(people, personMappings, "plannedCapacity"), 0);
+  close(totalUniqueCapacityField(people, personMappings, "unplannedCapacity"), 10);
+  const metrics = calculateManagementMetrics([], people, personMappings);
+  equal(metrics.totalPlannedCapacity.value, 0);
+  equal(metrics.totalPlannedCapacity.displayValue === "N/A", false);
+  equal(metrics.capacityUtilization.value, 0);
+  const stored = JSON.parse(JSON.stringify(metrics));
+  equal(stored.totalCapacity, 10);
+  equal(stored.totalPlannedCapacity.value, 0);
+  const reconciliation = buildReconciliation({ report: { calculatedMetrics: { management: metrics } }, issues: [], personMappings: [], fieldMappings: {} });
+  equal(reconciliation.drillDown.capacityUtilization.denominator, 10);
+  const zeroMetrics = calculateManagementMetrics([], [{ id: "z", capacityName: "Z", availableCapacity: 0, plannedCapacity: 0, unplannedCapacity: 0 }], [{ enabled: true, jiraName: "Z", capacityName: "Z", role: "developer", workLogColumn: "" }]);
+  equal(zeroMetrics.totalCapacity, 0);
+  equal(JSON.parse(JSON.stringify(zeroMetrics)).totalCapacity, 0);
+  const zeroDrill = buildReconciliation({ report: { calculatedMetrics: { management: zeroMetrics } }, issues: [], personMappings: [], fieldMappings: {} });
+  equal(zeroDrill.drillDown.capacityUtilization.denominator, 0);
+});
+
+test("Non-finite capacity is not stored as zero", () => {
+  const people = [{ id: "a", capacityName: "A", availableCapacity: Infinity, plannedCapacity: Infinity, unplannedCapacity: Infinity }];
+  const personMappings = [{ enabled: true, jiraName: "A", capacityName: "A", role: "developer", workLogColumn: "" }];
+  const metrics = calculateManagementMetrics([], people, personMappings);
+  equal(metrics.totalPlannedCapacity.value, null);
+  equal(metrics.totalPlannedCapacity.displayValue, "N/A");
+  ok(metrics.totalPlannedCapacity.reason.includes("finite"));
+  equal(JSON.stringify(metrics.totalPlannedCapacity).includes("Infinity"), false);
+});
+
+test("Time variance is null only when both sides are entirely missing", () => {
+  equal(timeVariance([{ workLogged: null, devEstimate: null, testEstimate: null }]), null);
+  equal(timeVariance([{ workLogged: 0, devEstimate: 0, testEstimate: 0 }]), 0);
+  equal(timeVariance([{ workLogged: 0, devEstimate: null, testEstimate: null }]), 0);
+  equal(timeVariance([{ workLogged: null, devEstimate: 3, testEstimate: null }]), -3);
+  equal(timeVariance([
+    { workLogged: 8, devEstimate: 3, testEstimate: 1 },
+    { workLogged: null, devEstimate: null, testEstimate: null }
+  ]), 4);
+  equal(timeVariance([
+    { workLogged: 5, devEstimate: null, testEstimate: null },
+    { workLogged: null, devEstimate: 2, testEstimate: null }
+  ]), 3);
+  equal(timeVariance([{ workLogged: 4, devEstimate: 1, testEstimate: null }]), 3);
+  equal(Number.isNaN(timeVariance([{ workLogged: Infinity, devEstimate: 1, testEstimate: 0 }])), true);
+});
+
+test("Time variance card and export agree for missing and partial inputs", () => {
+  const missing = calculateManagementMetrics([
+    { issueKey: "M-1", issueKeyComparable: "m-1", planType: "planned", statusCanonical: "done", workLogged: null, devEstimate: null, testEstimate: null, labels: [], raw: {} }
+  ], [], []);
+  equal(missing.timeVariance.value, null);
+  equal(missing.timeVariance.displayValue, "N/A");
+  const missingRow = workbookRow(missing, "timeVariance");
+  equal(missingRow[2], "N/A");
+  equal(missingRow[3], "");
+
+  const partial = calculateManagementMetrics([
+    { issueKey: "P-1", issueKeyComparable: "p-1", planType: "planned", statusCanonical: "done", workLogged: 8, devEstimate: 3, testEstimate: 1, labels: [], raw: { "Σ Time Spent": 8 } },
+    { issueKey: "P-2", issueKeyComparable: "p-2", planType: "planned", statusCanonical: "done", workLogged: null, devEstimate: null, testEstimate: null, labels: [], raw: {} }
+  ], [], []);
+  equal(partial.timeVariance.value, 4);
+  equal(partial.timeVariance.displayValue, formatNumber(4, "h"));
+  const partialRow = workbookRow(partial, "timeVariance");
+  equal(partialRow[2], partial.timeVariance.displayValue);
+  equal(partialRow[3], 4);
+});
+
+test("Non-finite KPI numbers are unavailable rather than displayed", () => {
+  equal(formatNumber(Infinity), "N/A");
+  equal(formatNumber(-Infinity), "N/A");
+  equal(formatNumber(NaN), "N/A");
+  equal(formatNumber("Infinity"), "N/A");
+  equal(formatNumber(0), "۰");
+  equal(metric(0, "h").value, 0);
+  equal(metric(0, "h").status, "ok");
+  const invalid = metric(Infinity, "%");
+  equal(invalid.value, null);
+  equal(invalid.displayValue, "N/A");
+  equal(Number.isFinite(invalid.value), false);
+  ok(invalid.reason.includes("finite"));
+  equal(JSON.stringify(invalid).includes("Infinity"), false);
+});
+
+test("Planning drill keeps an explicit work-log zero and leaves a missing row empty", () => {
+  const zero = calculateManagementMetrics([trackedIssue({ issueKey: "Z-1", workLogged: 0, devEstimate: 0, testEstimate: 0, raw: { "Σ Time Spent": 0 } })], [], []);
+  equal(zero.planningDrillDown.plannedIssueKeys[0].productiveWorkLogged, 0);
+  equal(zero.planningDrillDown.plannedIssueKeys[0].devEstimate, 0);
+  const blank = calculateManagementMetrics([trackedIssue({ raw: { "Σ Time Spent": "" } })], [], []);
+  equal(blank.planningDrillDown.plannedIssueKeys[0].productiveWorkLogged, null);
+  equal(blank.planningDrillDown.plannedIssueKeys[0].nonProductiveWorkLogged, null);
+  const person = calculatePersonDashboards(
+    [trackedIssue({ assignee: "Ali", raw: { AliLog: "" } })],
+    [],
+    [{ jiraName: "Ali", role: "developer", workLogColumn: "AliLog", enabled: true }]
+  )[0];
+  equal(person.planningDrillDown.plannedIssueKeys[0].productiveWorkLogged, null);
+  const recordedZero = calculatePersonDashboards(
+    [trackedIssue({ assignee: "Ali", raw: { AliLog: 0 } })],
+    [],
+    [{ jiraName: "Ali", role: "developer", workLogColumn: "AliLog", enabled: true }]
+  )[0];
+  equal(recordedZero.planningDrillDown.plannedIssueKeys[0].productiveWorkLogged, 0);
+});
+
+test("Blocked-time distribution keeps an explicit zero apart from missing data", () => {
+  const missing = blockedDistribution([trackedIssue({})]);
+  equal(missing.distribution.total, null);
+  equal(missing.distribution.minimum, null);
+  equal(missing.distribution.maximum, null);
+  equal(missing.distribution.count, 0);
+  equal(missing.top20.length, 0);
+  const zero = blockedDistribution([trackedIssue({ blockedHours: 0 })]);
+  equal(zero.distribution.total, 0);
+  equal(zero.distribution.minimum, 0);
+  equal(zero.distribution.maximum, 0);
+  equal(zero.distribution.average, 0);
+  equal(zero.distribution.count, 0);
+  const mixed = blockedDistribution([
+    trackedIssue({ blockedHours: 0 }),
+    trackedIssue({ issueKey: "P-9", blockedHours: 4 })
+  ]);
+  equal(mixed.distribution.count, 1);
+  equal(mixed.distribution.total, 4);
+  equal(mixed.top20[0].normalizedHours, 4);
+  equal(mixed.top20[0].normalizedHours === 0, false);
+});
+
+function trackedIssue(overrides = {}) {
+  return {
+    issueKey: "B-1",
+    summary: "Sample",
+    planType: "planned",
+    status: "Done",
+    statusCanonical: "done",
+    assignee: "Dev A",
+    qaOwner: "",
+    labels: [],
+    devEstimate: null,
+    testEstimate: null,
+    workLogged: null,
+    leadTimeHours: null,
+    cycleTimeHours: null,
+    blockedHours: null,
+    raw: {},
+    ...overrides
+  };
+}
+
+function blockedDistribution(issues) {
+  return buildReconciliation({
+    report: { teamName: "تیم", sprintName: "نمونه", calculatedMetrics: { management: calculateManagementMetrics(issues, [], []), people: [] } },
+    issues,
+    personMappings: [],
+    fieldMappings: {}
+  }).blockedTimeDistribution;
+}
+
+function workbookRow(management, key) {
+  const sheets = buildReportWorkbookSheets({ calculatedMetrics: { management, people: [] }, normalizedData: { issues: [] }, dataQuality: [], reconciliation: {} });
+  return sheets.find((sheet) => sheet.name === "Management KPI").rows.find((row) => row[1] === key);
+}

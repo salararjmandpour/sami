@@ -1,5 +1,6 @@
 export function formatNumber(value, suffix = "") {
-  if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
+  if (value === null || value === undefined || (typeof value === "number" && !Number.isFinite(value))) return "N/A";
+  if (typeof value === "string" && /^[+-]?(?:infinity|nan)$/i.test(value.trim())) return "N/A";
   return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 }).format(value)}${suffix}`;
 }
 
@@ -15,12 +16,13 @@ export function formatDate(value) {
 }
 
 export function metric(value, suffix = "", reason = "", extra = {}) {
-  const unavailable = value === null || value === undefined || Number.isNaN(value);
+  const invalid = typeof value === "number" && !Number.isFinite(value);
+  const unavailable = invalid || value === null || value === undefined;
   return {
     value: unavailable ? null : value,
     displayValue: unavailable ? "N/A" : formatNumber(value, suffix),
     status: unavailable ? "unavailable" : "ok",
-    reason: unavailable ? (reason || "Required data is missing.") : "",
+    reason: unavailable ? (reason || (invalid ? "The calculation did not produce a finite number." : "Required data is missing.")) : "",
     unit: suffix,
     ...extra
   };
